@@ -17,10 +17,14 @@ async function generateUniqueSlug(title) {
 
 export const productList = async (req, res) => {
   try {
-    const { page = 1, limit = 12, q, sort } = req.query;
+    const { page = 1, limit = 12, q, sort, category, featured } = req.query;
     const filter = {};
 
+    if (category) filter.category = category;
     if (q) filter.$text = { $search: String(q) };
+    if (featured === 'true' || featured === '1' || featured === true) {
+      filter.featured = true;
+    }
 
     const skip = (Number(page) - 1) * Number(limit);
     const sortObj =
@@ -70,6 +74,19 @@ export const getProductById = async (req, res) => {
   }
 };
 
+
+export const getCategories = async (req, res) => {
+  try {
+    // return distinct categories (non-empty)
+    const categories = await Product.distinct('category', { category: { $ne: null, $ne: '' } });
+    // optional: sort alphabetically
+    categories.sort((a, b) => String(a).localeCompare(String(b)));
+    res.json({ categories });
+  } catch (err) {
+    return res.status(400).json(err.message);
+  }
+};
+
 /**
  * POST /api/admin/products
  * Admin only
@@ -80,6 +97,7 @@ export const createProduct = async (req, res) => {
       title,
       description = '',
       price,
+      category,
       compareAtPrice,
       tags = [],
       images = [],
@@ -97,6 +115,7 @@ export const createProduct = async (req, res) => {
       title: title.trim(),
       slug,
       description,
+      category,
       price: Number(price),
       compareAtPrice: compareAtPrice ? Number(compareAtPrice) : undefined,
       tags,

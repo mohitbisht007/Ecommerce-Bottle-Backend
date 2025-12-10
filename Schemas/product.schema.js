@@ -25,6 +25,12 @@ const productSchema = new mongoose.Schema({
     required: true
   },
 
+  category: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+
   compareAtPrice: {
     type: Number
   },

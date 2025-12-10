@@ -4,10 +4,17 @@ import mongoose from "mongoose"
 import userRouter from "./Routes/user.route.js"
 import { authenticateUser } from "./Middlewares/authenticateUser.js"
 import productRouter from "./Routes/product.routes.js"
+import cors from "cors"
+
+const app = express()
 
 dotenv.config()
 
-const app = express()
+app.use(cors({
+    origin: "*", // for development (allows all origins)
+    credentials: true,
+  }))
+
 app.use(express.json())
 
 mongoose.connect(process.env.MONGO_URI)
