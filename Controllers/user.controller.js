@@ -86,3 +86,146 @@ export const loginUser = async (req, res) => {
     return res.status(400).json(err.message)
   }
 }
+
+
+export const getMyProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json({
+      user: {
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        addresses: user.addresses,
+        createdAt: user.createdAt,
+        phone: user.phone || ""
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+/**
+ * PUT /api/user/update-profile
+ * Update name / phone of logged-in user
+ */
+export const updateMyProfile = async (req, res) => {
+  try {
+    const { name, phone } = req.body;
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (name) user.name = name.trim();
+    if (phone !== undefined) user.phone = phone;
+
+    await user.save();
+
+    return res.status(200).json({
+      message: "Profile updated successfully",
+      user: {
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        addresses: user.addresses,
+        createdAt: user.createdAt,
+        phone: user.phone || ""
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+export const addAddress = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // If this is the new default, unset other defaults
+    if (req.body.isDefault) {
+      user.addresses.forEach(addr => addr.isDefault = false);
+    }
+
+    // If it's the very first address, make it default automatically
+    if (user.addresses.length === 0) {
+      req.body.isDefault = true;
+    }
+
+    user.addresses.push(req.body); // req.body contains name, number, street, etc.
+    await user.save();
+
+    res.status(200).json({ message: "Address added", addresses: user.addresses });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+/**
+ * DELETE /api/remove-address/:addressId
+ */
+export const removeAddress = async (req, res) => {
+  try {
+    const { addressId } = req.params;
+
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { $pull: { addresses: { _id: addressId } } },
+      { new: true }
+    );
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    res.status(200).json({ 
+      message: "Address removed successfully", 
+      addresses: user.addresses 
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/**
+ * PUT /api/edit-address/:addressId
+ */
+export const editAddress = async (req, res) => {
+  try {
+    const { addressId } = req.params;
+    const updateData = req.body;
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Find the specific address in the sub-document array
+    const address = user.addresses.id(addressId);
+    if (!address) return res.status(404).json({ message: "Address not found" });
+
+    // If setting as default, unset others
+    if (updateData.isDefault) {
+      user.addresses.forEach(addr => addr.isDefault = false);
+    }
+
+    // Update fields
+    Object.assign(address, updateData);
+
+    await user.save();
+
+    res.status(200).json({ 
+      message: "Address updated successfully", 
+      addresses: user.addresses 
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};

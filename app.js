@@ -5,6 +5,7 @@ import userRouter from "./Routes/user.route.js"
 import { authenticateUser } from "./Middlewares/authenticateUser.js"
 import productRouter from "./Routes/product.routes.js"
 import cors from "cors"
+import reveiwsRoute from "./Routes/reveiws.routes.js"
 
 const app = express()
 
@@ -26,6 +27,7 @@ mongoose.connect(process.env.MONGO_URI)
 
 app.use("/api", userRouter)
 app.use("/api", productRouter)
+app.use("/api", reveiwsRoute)
 
 app.get("/api/test", authenticateUser, (req, res) => {
     console.log(req.user)

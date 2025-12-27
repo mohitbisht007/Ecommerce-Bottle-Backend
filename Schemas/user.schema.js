@@ -1,5 +1,16 @@
 import mongoose from "mongoose";
 
+const addressSchema = new mongoose.Schema({
+  name: { type: String, required: [true, 'Name is required'], trim: true },
+  number: { type: String, required: [true, 'Phone number is required'] },
+  street: { type: String, required: [true, 'Address/Street is required'] },
+  city: { type: String, required: [true, 'City is required'] },
+  state: { type: String, required: [true, 'State is required'] },
+  zip: { type: String, required: [true, 'Zip code is required'] },
+  landmark: { type: String, default: "" }, // Optional
+  isDefault: { type: Boolean, default: false }
+});
+
 const userSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -14,6 +25,11 @@ const userSchema = new mongoose.Schema({
     index: true
   },
 
+  phone: {
+    type: String,
+    default: ""
+  },
+
   passwordHash: {
     type: String,
     required: true
@@ -25,10 +41,7 @@ const userSchema = new mongoose.Schema({
     default: 'customer'
   },
 
-//   addresses: {
-//     type: String,
-//     default: []
-//   },
+  addresses: [addressSchema],
 
   createdAt: {
     type: Date,
