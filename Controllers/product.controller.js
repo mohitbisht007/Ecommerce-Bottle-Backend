@@ -75,15 +75,23 @@ export const getProductById = async (req, res) => {
 };
 
 
-export const getCategories = async (req, res) => {
+export const getCategoriesWithImages = async (req, res) => {
   try {
-    // return distinct categories (non-empty)
-    const categories = await Product.distinct('category', { category: { $ne: null, $ne: '' } });
-    // optional: sort alphabetically
-    categories.sort((a, b) => String(a).localeCompare(String(b)));
-    res.json({ categories });
+    const categories = await Product.distinct('category', { category: { $ne: '' } });
+    
+    // For each category, find one product image
+    const categoryData = await Promise.all(categories.map(async (cat) => {
+      const product = await Product.findOne({ category: cat }).select('image');
+      return {
+        label: cat,
+        image: product?.image || '/placeholder.jpg', // Fallback image
+        queryParam: `category=${cat}`
+      };
+    }));
+
+    res.json({ categories: categoryData });
   } catch (err) {
-    return res.status(400).json(err.message);
+    res.status(400).json(err.message);
   }
 };
 
@@ -96,32 +104,41 @@ export const createProduct = async (req, res) => {
     const {
       title,
       description = '',
-      price,
       category,
-      compareAtPrice,
+      compareAtPrice, // This can act as the "starting" strike-through price
       tags = [],
-      images = [],
+      variants = [], // Now expecting: [{colorName, colorCode, capacity, price, stock, images: []}]
       sku = '',
-      stock = 0,
       featured = false
     } = req.body;
 
-    if (!title || price == null) {
-      return res.status(400).json({ message: 'Title and price are required' });
+    if (!title || variants.length === 0) {
+      return res.status(400).json({ message: 'Title and at least one variant are required' });
     }
 
     const slug = await generateUniqueSlug(title);
+
+    // 1. Calculate main price from the first variant (or cheapest)
+    const mainPrice = Number(variants[0].price);
+
+    // 2. Calculate total stock across all sizes/colors
+    const totalStock = variants.reduce((acc, curr) => acc + Number(curr.stock), 0);
+
+    // 3. Set thumbnail from first variant
+    const thumbnail = variants[0]?.images[0] || '';
+
     const product = await Product.create({
       title: title.trim(),
       slug,
       description,
       category,
-      price: Number(price),
+      price: mainPrice, // Base price for sorting
       compareAtPrice: compareAtPrice ? Number(compareAtPrice) : undefined,
       tags,
-      images,
+      variants, // Includes capacity, price, and stock for each variant
+      thumbnail, 
       sku,
-      stock: Number(stock),
+      stock: totalStock, // Sum of all variant stocks
       featured: Boolean(featured)
     });
 
@@ -141,12 +158,20 @@ export const updateProduct = async (req, res) => {
     const data = { ...req.body };
 
     if (data.title) {
-      data.slug = await generateUniqueSlug(Product, data.title, id);
+      data.slug = await generateUniqueSlug(data.title);
     }
 
-    if (data.price != null) data.price = Number(data.price);
-    if (data.compareAtPrice != null) data.compareAtPrice = Number(data.compareAtPrice);
-    if (data.stock != null) data.stock = Number(data.stock);
+    // Recalculate based on variants if they are being updated
+    if (data.variants && data.variants.length > 0) {
+      // Set price to the first variant's price
+      data.price = Number(data.variants[0].price);
+      
+      // Recalculate total stock
+      data.stock = data.variants.reduce((acc, curr) => acc + Number(curr.stock), 0);
+      
+      // Update thumbnail
+      data.thumbnail = data.variants[0].images[0];
+    }
 
     data.updatedAt = Date.now();
 
@@ -190,5 +215,29 @@ export const searchProduct = async (req, res) => {
     res.json({ items });
   } catch (err) {
     return res.status(400).json(err.message);
+  }
+};
+
+
+export const getRecommendations = async (req, res) => {
+  try {
+    const { category, productId, type } = req.query;
+
+    let query = {};
+    let limit = 4;
+
+    if (type === "similar") {
+      // Logic: Same category, different ID
+      query = { category: category, _id: { $ne: productId } };
+    } else {
+      // Logic: Best Sellers or Different Category (Cross-sell)
+      query = { _id: { $ne: productId }, featured: true }; 
+      // Or: query = { category: { $ne: category } };
+    }
+
+    const products = await Product.find(query).limit(limit).sort({ rating: -1 });
+    res.json(products);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
   }
 };

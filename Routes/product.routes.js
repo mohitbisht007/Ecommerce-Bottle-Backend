@@ -1,12 +1,12 @@
 import express from "express"
-import { productList, getProductBySlug, getProductById, getCategories, createProduct, updateProduct, removeProduct, searchProduct } from "../Controllers/product.controller.js"
+import {getRecommendations ,productList, getProductBySlug, getProductById, createProduct, updateProduct, removeProduct, searchProduct } from "../Controllers/product.controller.js"
 import { authorizeAdmin, authenticateUser } from "../Middlewares/authenticateUser.js"
 
 const router = express.Router()
 
 router.get("/products", productList)
 router.get('/search', searchProduct)
-router.get('/categories', getCategories);
+router.get("/recommend", getRecommendations)
 router.get('/:slug', getProductBySlug)
 
 //Admin Routes

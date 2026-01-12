@@ -1,4 +1,12 @@
 import mongoose from "mongoose";
+const variantSchema = new mongoose.Schema({
+  colorName: String, // e.g., "Ocean Blue"
+  colorCode: String, // e.g., "#0000FF"
+  capacity: { type: String, required: true }, // e.g., "750ml"
+  price: { type: Number, required: true },    // Specific price for THIS size/color
+  stock: { type: Number, default: 0 },        // Specific stock for THIS size/color
+  images: [String],
+});
 
 const productSchema = new mongoose.Schema({
   title: {
@@ -45,9 +53,11 @@ const productSchema = new mongoose.Schema({
     default: []
   },
 
-  images: {
-    type: [String],
-    default: []
+  variants: [variantSchema],
+  thumbnail: String,
+
+  capacity: {
+    type: String
   },
 
   stock: {
