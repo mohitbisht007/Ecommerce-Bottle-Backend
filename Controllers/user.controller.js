@@ -317,3 +317,28 @@ export const editAddress = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+export const checkEmailAndGetAddresses = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const cleanEmail = email.toLowerCase().trim();
+    
+    // Find user by email
+    const user = await User.findOne({ email: cleanEmail });
+    
+    if (user) {
+      // If user exists, return their saved addresses
+      // We don't send sensitive info, just names and locations
+      return res.status(200).json({
+        exists: true,
+        addresses: user.addresses,
+        name: user.name
+      });
+    }
+
+    // If no user, just tell the frontend they are a guest
+    res.status(200).json({ exists: false, addresses: [] });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};

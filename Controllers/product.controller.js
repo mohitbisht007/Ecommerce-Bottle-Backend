@@ -17,28 +17,62 @@ async function generateUniqueSlug(title) {
 
 export const productList = async (req, res) => {
   try {
-    const { page = 1, limit = 12, q, sort, category, featured } = req.query;
+    const {
+      page = 1,
+      limit = 12,
+      q,
+      sort,
+      category,
+      featured,
+      maxPrice, 
+      color, 
+      capacity, 
+      inStock,
+    } = req.query;
     const filter = {};
 
     if (category) filter.category = category;
     if (q) filter.$text = { $search: String(q) };
-    if (featured === 'true' || featured === '1' || featured === true) {
+    if (featured === "true" || featured === "1" || featured === true) {
       filter.featured = true;
+    }
+
+    if (maxPrice) {
+      filter.price = { $lte: Number(maxPrice) };
+    }
+
+    if (color || capacity) {
+      filter.variants = { $elemMatch: {} };
+      if (color) filter.variants.$elemMatch.colorName = color;
+      if (capacity) filter.variants.$elemMatch.capacity = capacity;
+    }
+
+    if (inStock === 'true') {
+      // Find products where total stock > 0
+      filter.stock = { $gt: 0 };
     }
 
     const skip = (Number(page) - 1) * Number(limit);
     const sortObj =
-      sort === 'price_asc' ? { price: 1 } :
-      sort === 'price_desc' ? { price: -1 } :
-      sort === 'newest' ? { createdAt: -1 } :
-      { createdAt: -1 };
+      sort === "price_asc"
+        ? { price: 1 }
+        : sort === "price_desc"
+        ? { price: -1 }
+        : sort === "newest"
+        ? { createdAt: -1 }
+        : { createdAt: -1 };
 
     const [items, total] = await Promise.all([
       Product.find(filter).sort(sortObj).skip(skip).limit(Number(limit)),
-      Product.countDocuments(filter)
+      Product.countDocuments(filter),
     ]);
 
-    res.json({ items, total, page: Number(page), pages: Math.ceil(total / Number(limit)) });
+    res.json({
+      items,
+      total,
+      page: Number(page),
+      pages: Math.ceil(total / Number(limit)),
+    });
   } catch (err) {
     return res.status(400).json(err.message);
   }
@@ -51,7 +85,7 @@ export const getProductBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
     const product = await Product.findOne({ slug });
-    if (!product) return res.status(404).json({ message: 'Product not found' });
+    if (!product) return res.status(404).json({ message: "Product not found" });
     res.json(product);
   } catch (err) {
     return res.status(400).json(err.message);
@@ -64,30 +98,36 @@ export const getProductBySlug = async (req, res) => {
 export const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' });
+    if (!mongoose.Types.ObjectId.isValid(id))
+      return res.status(400).json({ message: "Invalid id" });
 
     const product = await Product.findById(id);
-    if (!product) return res.status(404).json({ message: 'Product not found' });
+    if (!product) return res.status(404).json({ message: "Product not found" });
     res.json(product);
   } catch (err) {
     return res.status(400).json(err.message);
   }
 };
 
-
 export const getCategoriesWithImages = async (req, res) => {
   try {
-    const categories = await Product.distinct('category', { category: { $ne: '' } });
-    
+    const categories = await Product.distinct("category", {
+      category: { $ne: "" },
+    });
+
     // For each category, find one product image
-    const categoryData = await Promise.all(categories.map(async (cat) => {
-      const product = await Product.findOne({ category: cat }).select('image');
-      return {
-        label: cat,
-        image: product?.image || '/placeholder.jpg', // Fallback image
-        queryParam: `category=${cat}`
-      };
-    }));
+    const categoryData = await Promise.all(
+      categories.map(async (cat) => {
+        const product = await Product.findOne({ category: cat }).select(
+          "image"
+        );
+        return {
+          label: cat,
+          image: product?.image || "/placeholder.jpg", // Fallback image
+          queryParam: `category=${cat}`,
+        };
+      })
+    );
 
     res.json({ categories: categoryData });
   } catch (err) {
@@ -103,17 +143,19 @@ export const createProduct = async (req, res) => {
   try {
     const {
       title,
-      description = '',
+      description = "",
       category,
       compareAtPrice, // This can act as the "starting" strike-through price
       tags = [],
       variants = [], // Now expecting: [{colorName, colorCode, capacity, price, stock, images: []}]
-      sku = '',
-      featured = false
+      sku = "",
+      featured = false,
     } = req.body;
 
     if (!title || variants.length === 0) {
-      return res.status(400).json({ message: 'Title and at least one variant are required' });
+      return res
+        .status(400)
+        .json({ message: "Title and at least one variant are required" });
     }
 
     const slug = await generateUniqueSlug(title);
@@ -122,10 +164,13 @@ export const createProduct = async (req, res) => {
     const mainPrice = Number(variants[0].price);
 
     // 2. Calculate total stock across all sizes/colors
-    const totalStock = variants.reduce((acc, curr) => acc + Number(curr.stock), 0);
+    const totalStock = variants.reduce(
+      (acc, curr) => acc + Number(curr.stock),
+      0
+    );
 
     // 3. Set thumbnail from first variant
-    const thumbnail = variants[0]?.images[0] || '';
+    const thumbnail = variants[0]?.images[0] || "";
 
     const product = await Product.create({
       title: title.trim(),
@@ -136,10 +181,10 @@ export const createProduct = async (req, res) => {
       compareAtPrice: compareAtPrice ? Number(compareAtPrice) : undefined,
       tags,
       variants, // Includes capacity, price, and stock for each variant
-      thumbnail, 
+      thumbnail,
       sku,
       stock: totalStock, // Sum of all variant stocks
-      featured: Boolean(featured)
+      featured: Boolean(featured),
     });
 
     res.status(201).json(product);
@@ -165,10 +210,13 @@ export const updateProduct = async (req, res) => {
     if (data.variants && data.variants.length > 0) {
       // Set price to the first variant's price
       data.price = Number(data.variants[0].price);
-      
+
       // Recalculate total stock
-      data.stock = data.variants.reduce((acc, curr) => acc + Number(curr.stock), 0);
-      
+      data.stock = data.variants.reduce(
+        (acc, curr) => acc + Number(curr.stock),
+        0
+      );
+
       // Update thumbnail
       data.thumbnail = data.variants[0].images[0];
     }
@@ -176,7 +224,7 @@ export const updateProduct = async (req, res) => {
     data.updatedAt = Date.now();
 
     const updated = await Product.findByIdAndUpdate(id, data, { new: true });
-    if (!updated) return res.status(404).json({ message: 'Product not found' });
+    if (!updated) return res.status(404).json({ message: "Product not found" });
 
     res.json(updated);
   } catch (err) {
@@ -192,7 +240,7 @@ export const removeProduct = async (req, res) => {
   try {
     const { id } = req.params;
     const deleted = await Product.findByIdAndDelete(id);
-    if (!deleted) return res.status(404).json({ message: 'Product not found' });
+    if (!deleted) return res.status(404).json({ message: "Product not found" });
     res.json({ ok: true });
   } catch (err) {
     return res.status(400).json(err.message);
@@ -205,19 +253,18 @@ export const removeProduct = async (req, res) => {
  */
 export const searchProduct = async (req, res) => {
   try {
-    const { q = '', limit = 10 } = req.query;
+    const { q = "", limit = 10 } = req.query;
     if (!q) return res.json({ items: [] });
 
     const items = await Product.find({ $text: { $search: String(q) } })
       .limit(Number(limit))
-      .select('title slug price images tags stock');
+      .select("title slug price images tags stock");
 
     res.json({ items });
   } catch (err) {
     return res.status(400).json(err.message);
   }
 };
-
 
 export const getRecommendations = async (req, res) => {
   try {
@@ -231,11 +278,13 @@ export const getRecommendations = async (req, res) => {
       query = { category: category, _id: { $ne: productId } };
     } else {
       // Logic: Best Sellers or Different Category (Cross-sell)
-      query = { _id: { $ne: productId }, featured: true }; 
+      query = { _id: { $ne: productId }, featured: true };
       // Or: query = { category: { $ne: category } };
     }
 
-    const products = await Product.find(query).limit(limit).sort({ rating: -1 });
+    const products = await Product.find(query)
+      .limit(limit)
+      .sort({ rating: -1 });
     res.json(products);
   } catch (err) {
     res.status(400).json({ message: err.message });

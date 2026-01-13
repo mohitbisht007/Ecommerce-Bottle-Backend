@@ -3,7 +3,6 @@ import mongoose from "mongoose";
 const bannerSchema = new mongoose.Schema({
   title: { 
     type: String, 
-    required: true // e.g., "Winter Collection Launch"
   },
   subtitle: { 
     type: String // e.g., "Get 20% off on all insulated bottles"

@@ -11,11 +11,11 @@ import { authenticateUser, authorizeAdmin } from "../Middlewares/authenticateUse
 const router = express.Router();
 
 // Public route for Homepage
-router.get("/", getCategories);
+router.get("/categories", getCategories);
 
 // Admin routes (You can add your verifyAdmin middleware here)
-router.post("/add", authenticateUser, authorizeAdmin,createCategory);
-router.delete("/:id", authenticateUser, authorizeAdmin, deleteCategory);
-router.put("/:id", authenticateUser, authorizeAdmin, updateCategory);
+router.post("/categories/add", authenticateUser, authorizeAdmin, createCategory);
+router.delete("/categories/:id", authenticateUser, authorizeAdmin, deleteCategory);
+router.put("/categories/:id", authenticateUser, authorizeAdmin, updateCategory);
 
 export default router;

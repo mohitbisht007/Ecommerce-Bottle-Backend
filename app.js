@@ -15,7 +15,7 @@ const app = express()
 dotenv.config()
 
 app.use(cors({
-    origin: "*", // for development (allows all origins)
+    origin: "http://localhost:3000", // for development (allows all origins)
     credentials: true,
   }))
 
@@ -29,7 +29,7 @@ mongoose.connect(process.env.MONGO_URI)
 })
 
 app.use("/api/orders", orderRoute)
-app.use("/api/categories", categoryRoutes);
+app.use("/api", categoryRoutes);
 
 app.use("/api", userRouter)
 app.use("/api", productRouter)
