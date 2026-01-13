@@ -9,7 +9,7 @@ import reveiwsRoute from "./Routes/reveiws.routes.js"
 import storefrontRoute from "./Routes/storefront.routes.js"
 import orderRoute from "./Routes/orders.routes.js"
 import categoryRoutes from "./Routes/category.routes.js"
-const helmet = require("helmet");
+import helmet from "helmet"
 
 const app = express()
 app.use(helmet());
@@ -29,6 +29,10 @@ mongoose.connect(process.env.MONGO_URI)
 }).catch(err => {
     console.log(err)
 })
+
+app.get("/health", (req, res) => {
+  res.status(200).send("Server is healthy");
+});
 
 app.use("/api/orders", orderRoute)
 app.use("/api", categoryRoutes);
