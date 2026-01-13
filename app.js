@@ -9,13 +9,15 @@ import reveiwsRoute from "./Routes/reveiws.routes.js"
 import storefrontRoute from "./Routes/storefront.routes.js"
 import orderRoute from "./Routes/orders.routes.js"
 import categoryRoutes from "./Routes/category.routes.js"
+const helmet = require("helmet");
 
 const app = express()
+app.use(helmet());
 
 dotenv.config()
 
 app.use(cors({
-    origin: "http://localhost:3000", // for development (allows all origins)
+    origin: ["http://localhost:3000", "https://bouncybucket.com"],  // for development (allows all origins)
     credentials: true,
   }))
 
