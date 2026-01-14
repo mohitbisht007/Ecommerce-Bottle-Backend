@@ -17,7 +17,7 @@ app.use(helmet());
 dotenv.config()
 
 app.use(cors({
-    origin: ["http://localhost:3000", "https://bouncybucket.com"],  // for development (allows all origins)
+    origin: true, // This allows any domain to talk to your API
     credentials: true,
   }))
 
