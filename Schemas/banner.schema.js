@@ -4,9 +4,6 @@ const bannerSchema = new mongoose.Schema({
   title: { 
     type: String, 
   },
-  subtitle: { 
-    type: String // e.g., "Get 20% off on all insulated bottles"
-  },
   imageUrl: { 
     type: String, 
     required: true // The Cloudinary URL
