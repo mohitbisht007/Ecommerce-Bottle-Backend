@@ -1,5 +1,5 @@
 import express from "express"
-import {checkEmailAndGetAddresses, registerUser, loginUser, getMyProfile, updateMyProfile, addAddress, editAddress, removeAddress, googleLogin } from "../Controllers/user.controller.js"
+import {getWishlist, toggleWishlist ,checkEmailAndGetAddresses, registerUser, loginUser, getMyProfile, updateMyProfile, addAddress, editAddress, removeAddress, googleLogin } from "../Controllers/user.controller.js"
 import { authenticateUser } from "../Middlewares/authenticateUser.js"
 
 const router = express.Router()
@@ -10,6 +10,9 @@ router.get("/me", authenticateUser, getMyProfile);
 router.put("/update-profile", authenticateUser, updateMyProfile);
 router.post("/google-login", googleLogin)
 router.post('/checkout/check-email', checkEmailAndGetAddresses)
+
+router.post("/wishlist/toggle", authenticateUser, toggleWishlist);
+router.get("/wishlist", authenticateUser, getWishlist);
 
 // Adress Routes
 

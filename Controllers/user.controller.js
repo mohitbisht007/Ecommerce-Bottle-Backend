@@ -191,6 +191,7 @@ export const getMyProfile = async (req, res) => {
         email: user.email,
         role: user.role,
         addresses: user.addresses,
+        wishlist: user.wishlist,
         createdAt: user.createdAt,
         phone: user.phone || ""
       }
@@ -340,5 +341,71 @@ export const checkEmailAndGetAddresses = async (req, res) => {
     res.status(200).json({ exists: false, addresses: [] });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+};
+
+
+export const toggleWishlist = async (req, res) => {
+  try {
+    const { productId } = req.body;
+    const userId = req.user.id;
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Use string comparison for the toggle logic
+    const isWishlisted = user.wishlist && user.wishlist.some(id => id.toString() === productId);
+
+    let updatedUser;
+    if (isWishlisted) {
+      // $pull removes the ID
+      updatedUser = await User.findByIdAndUpdate(
+        userId,
+        { $pull: { wishlist: productId } },
+        { new: true, runValidators: false } // Bypasses address validation
+      );
+    } else {
+      // $addToSet adds only if it doesn't exist
+      updatedUser = await User.findByIdAndUpdate(
+        userId,
+        { $addToSet: { wishlist: productId } },
+        { new: true, runValidators: false }
+      );
+    }
+
+    res.status(200).json({
+      success: true,
+      message: isWishlisted ? "Removed from wishlist" : "Added to wishlist",
+      wishlist: updatedUser.wishlist, 
+    });
+  } catch (err) {
+    console.error("CRITICAL WISHLIST ERROR:", err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+// GET FULL WISHLIST (With Product Details)
+export const getWishlist = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findById(userId).populate({
+      path: "wishlist",
+      // ADDED: title, variants, thumbnail, category, compareAtPrice
+      select: "title price variants thumbnail category compareAtPrice description slug", 
+    });
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Filter out any null items (in case a product was deleted from the DB but remains in the user's wishlist array)
+    const validWishlist = user.wishlist.filter(item => item !== null);
+
+    res.status(200).json({
+      success: true,
+      wishlist: validWishlist,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };
