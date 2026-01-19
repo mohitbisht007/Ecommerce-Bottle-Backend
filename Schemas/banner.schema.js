@@ -8,6 +8,7 @@ const bannerSchema = new mongoose.Schema({
     type: String, 
     required: true // The Cloudinary URL
   },
+  mobileImageUrl: { type: String, required: true },
   link: { 
     type: String, 
     default: "/" // Where the user goes when they click the banner
