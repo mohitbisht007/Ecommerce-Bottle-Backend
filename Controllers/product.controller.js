@@ -24,13 +24,15 @@ export const productList = async (req, res) => {
       sort,
       category,
       featured,
-      maxPrice, 
-      color, 
-      capacity, 
+      maxPrice,
+      color,
+      capacity,
       inStock,
     } = req.query;
+
     const filter = {};
 
+    // 1. Basic Filters
     if (category) filter.category = category;
     if (q) filter.$text = { $search: String(q) };
     if (featured === "true" || featured === "1" || featured === true) {
@@ -41,25 +43,37 @@ export const productList = async (req, res) => {
       filter.price = { $lte: Number(maxPrice) };
     }
 
+    // 2. MULTI-SELECT LOGIC (The Fix)
+    // We use $elemMatch to find products where at least one variant matches the criteria
     if (color || capacity) {
-      filter.variants = { $elemMatch: {} };
-      if (color) filter.variants.$elemMatch.colorName = color;
-      if (capacity) filter.variants.$elemMatch.capacity = capacity;
+      const variantFilter = {};
+
+      if (color) {
+        // Convert "Purple,Blue" -> ["Purple", "Blue"]
+        const colorArray = String(color).split(",");
+        variantFilter.colorName = { $in: colorArray };
+      }
+
+      if (capacity) {
+        // Convert "500ml,1L" -> ["500ml", "1L"]
+        const capacityArray = String(capacity).split(",");
+        variantFilter.capacity = { $in: capacityArray };
+      }
+
+      filter.variants = { $elemMatch: variantFilter };
     }
 
     if (inStock === 'true') {
-      // Find products where total stock > 0
       filter.stock = { $gt: 0 };
     }
 
+    // 3. Sorting and Pagination
     const skip = (Number(page) - 1) * Number(limit);
     const sortObj =
       sort === "price_asc"
         ? { price: 1 }
         : sort === "price_desc"
         ? { price: -1 }
-        : sort === "newest"
-        ? { createdAt: -1 }
         : { createdAt: -1 };
 
     const [items, total] = await Promise.all([
