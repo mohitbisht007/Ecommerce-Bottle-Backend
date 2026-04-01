@@ -80,6 +80,31 @@ const productSchema = new mongoose.Schema({
     default: 0
   },
 
+  isCustomizable: {
+    type: Boolean,
+    default: false
+  },
+
+  customizationOptions: {
+    price: { 
+      type: Number, 
+      default: 299 
+    },
+    maxChars: { 
+      type: Number, 
+      default: 12 
+    },
+    allowedFonts: {
+      type: [String],
+      default: ["Modern", "Elegant", "Sport", "Classic"]
+    },
+    // Allows you to adjust the text position per product if needed
+    textPosition: {
+      top: { type: String, default: "55%" },
+      left: { type: String, default: "50%" }
+    }
+  },
+
   createdAt: {
     type: Date,
     default: Date.now
