@@ -36,8 +36,14 @@ const userSchema = new mongoose.Schema({
   passwordHash: {
     type: String,
     required: function () {
-      // Only required if not using Google login
-      return this.authProvider === "local";
+      // 1. If it's a guest, password is NOT required
+      if (this.isGuest) return false;
+      
+      // 2. If it's a Google user, password is NOT required
+      if (this.authProvider === "google") return false;
+
+      // 3. Otherwise, for local registered users, it IS required
+      return true;
     },
   },
 

@@ -238,23 +238,50 @@ export const updateMyProfile = async (req, res) => {
 
 export const addAddress = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const { name, email, number, street, city, state, zip, landmark, isDefault } = req.body;
+    let user;
 
-    // If this is the new default, unset other defaults
-    if (req.body.isDefault) {
+    // 1. Identify User: Prioritize token, fallback to email for guests
+    if (req.user && req.user.id) {
+      user = await User.findById(req.user.id);
+    } else if (email) {
+      user = await User.findOne({ email: email.toLowerCase().trim() });
+    }
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found. Please verify your email first." });
+    }
+
+    // 2. Handle Default Logic
+    if (isDefault || user.addresses.length === 0) {
       user.addresses.forEach(addr => addr.isDefault = false);
     }
 
-    // If it's the very first address, make it default automatically
-    if (user.addresses.length === 0) {
-      req.body.isDefault = true;
-    }
+    const newAddressData = {
+      name,
+      email: email || user.email,
+      number,
+      street,
+      city,
+      state,
+      zip,
+      landmark: landmark || "",
+      isDefault: isDefault || user.addresses.length === 0
+    };
 
-    user.addresses.push(req.body); // req.body contains name, number, street, etc.
+    // 3. Save Address
+    user.addresses.push(newAddressData);
     await user.save();
 
-    res.status(200).json({ message: "Address added", addresses: user.addresses });
+    // Get the newly pushed address (it will have an _id now)
+    const savedAddress = user.addresses[user.addresses.length - 1];
+
+    res.status(200).json({ 
+      success: true,
+      message: "Address added successfully", 
+      addresses: user.addresses,
+      address: savedAddress 
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

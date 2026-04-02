@@ -1,6 +1,8 @@
 import Razorpay from "razorpay";
 import crypto from "crypto";
 import Order from "../Schemas/order.schema.js";
+import User from "../Schemas/user.schema.js";
+import { sendOrderEmail } from "../utils/emailService.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -11,42 +13,51 @@ const razorpay = new Razorpay({
 });
 
 // Step 1: Create Order
+// Replace your Step 1: Create Order with this:
 export const createOrder = async (req, res) => {
   try {
     const { items, address, email } = req.body;
-    const cleanEmail = email.toLowerCase().trim();
+    let userId;
 
-    // 1. Find or Create User (The "Implicit" logic)
-    let user = await User.findOne({ email: cleanEmail });
+    if (req.user && req.user.id) {
+      userId = req.user.id;
+    } else {
+      const cleanEmail = email.toLowerCase().trim();
+      let guestUser = await User.findOne({ email: cleanEmail });
 
-    if (!user) {
-      // Create a Shadow Account for the Guest
-      user = await User.create({
-        name: address.name,
-        email: cleanEmail,
-        authProvider: "local", // Placeholder
-        isGuest: true, // Mark them as guest
-        addresses: [address], // Save this address for them automatically
-      });
+      if (!guestUser) {
+        guestUser = await User.create({
+          name: address.name,
+          email: cleanEmail,
+          isGuest: true, // This now tells the schema to skip password validation
+          authProvider: "local",
+          addresses: [{
+            ...address,
+            email: cleanEmail // addressSchema requires 'email'
+          }]
+        });
+      }
+      userId = guestUser._id;
     }
 
-    // 2. Calculate Total
-    let totalAmount = items.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    );
+    const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-    // 3. Create Razorpay Order
+    // RAZORPAY SAFETY CHECK: If this crashes, it's usually because keys are missing in .env
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      console.error("CRITICAL: Razorpay Keys are missing in .env file");
+      return res.status(500).json({ error: "Payment gateway configuration missing" });
+    }
+
     const options = {
       amount: Math.round(totalAmount * 100),
       currency: "INR",
       receipt: `rcpt_${Date.now()}`,
     };
+
     const rzpOrder = await razorpay.orders.create(options);
 
-    // 4. Save Order Linked to User ID
     const newOrder = await Order.create({
-      user: user._id, // This works for both Guests and Registered users now
+      user: userId,
       items,
       shippingAddress: address,
       totalAmount,
@@ -61,6 +72,7 @@ export const createOrder = async (req, res) => {
       internalOrderId: newOrder._id,
     });
   } catch (err) {
+    console.error("CHECKOUT ERROR LOG:", err); // THIS WILL SHOW IN YOUR TERMINAL
     res.status(500).json({ error: err.message });
   }
 };
@@ -68,10 +80,7 @@ export const createOrder = async (req, res) => {
 // Step 2: Verify Payment
 export const verifyPayment = async (req, res) => {
   try {
-    console.log("🔥 VERIFY PAYMENT HIT 🔥", req.body);
-
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
-      req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSign = crypto
@@ -79,31 +88,37 @@ export const verifyPayment = async (req, res) => {
       .update(sign)
       .digest("hex");
 
+    // 1. Signature Check
     if (razorpay_signature !== expectedSign) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid signature" });
+      // Logic: If signature is wrong, we could technically trigger a "failure" email here 
+      // but usually, it's better to just return an error to the frontend.
+      return res.status(400).json({ success: false, message: "Invalid signature" });
     }
 
-    const order = await Order.findOne({ razorpayOrderId: razorpay_order_id });
+    // 2. Find Order and Populate User (needed for email address)
+    const order = await Order.findOne({ razorpayOrderId: razorpay_order_id }).populate("user");
 
-    console.log("ORDER FOUND:", order?._id);
+    if (!order) return res.status(404).json({ error: "Order not found" });
 
-    if (!order) {
-      return res
-        .status(404)
-        .json({ error: "Order not found for this Razorpay order ID" });
-    }
-
+    // 3. Update Status
     order.paymentStatus = "Paid";
     order.razorpayPaymentId = razorpay_payment_id;
     await order.save();
 
-    console.log("ORDER UPDATED TO PAID:", order._id);
+    // 4. Trigger Email (Passing "success" as the status)
+    try {
+      // Your function expects: (email, order, status)
+      await sendOrderEmail(order.user.email, order, "success");
+    } catch (emailErr) {
+      console.error("Payment succeeded but email failed:", emailErr);
+    }
 
     return res.status(200).json({ success: true, message: "Payment verified" });
+
   } catch (error) {
     console.error("VERIFY ERROR:", error);
+
+    // Optional: If you have the order details here, you could trigger the "failure" email template
     return res.status(500).json({ error: error.message });
   }
 };

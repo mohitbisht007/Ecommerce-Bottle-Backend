@@ -7,13 +7,13 @@ const router = express.Router();
 /** * 1. Initiate Order 
  * Path: POST /api/orders/checkout 
  */
-router.post("/checkout", authenticateUser, createOrder);
+router.post("/checkout", createOrder);
 router.get("/my-orders", authenticateUser, getMyOrders);
 
 /** * 2. Verify Payment (Signature check)
  * Path: POST /api/orders/verify 
  */
-router.post("/verify", authenticateUser, verifyPayment);
+router.post("/verify", verifyPayment);
 
 
 // ADmin
