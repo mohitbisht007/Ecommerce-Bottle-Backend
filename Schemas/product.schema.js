@@ -6,6 +6,11 @@ const variantSchema = new mongoose.Schema({
   price: { type: Number, required: true },    // Specific price for THIS size/color
   stock: { type: Number, default: 0 },        // Specific stock for THIS size/color
   images: [String],
+  engravingColorType: { 
+    type: String, 
+    enum: ['light', 'dark'], 
+    default: 'light' // 'light' means white font (for dark bottles)
+  }
 });
 
 const productSchema = new mongoose.Schema({
@@ -102,7 +107,8 @@ const productSchema = new mongoose.Schema({
     textPosition: {
       top: { type: String, default: "55%" },
       left: { type: String, default: "50%" }
-    }
+    },
+    
   },
 
   createdAt: {
