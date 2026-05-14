@@ -48,6 +48,31 @@ const productSchema = new mongoose.Schema({
     type: Number
   },
 
+  specifications: {
+    // 1. Basic Specifications
+    type: { type: String }, // Bottle / Mug
+    material: { type: String },
+    weight: { type: String },
+    dimensions: { type: String },
+    finish: { type: String },
+    origin: { type: String },
+
+    // 2. Performance Specs
+    insulation: { type: String },
+    hotRetention: { type: String },
+    coldRetention: { type: String },
+    leakproof: { type: Boolean },
+    condensationFree: { type: Boolean },
+    rustProof: { type: Boolean },
+
+    // 3. Usage & Convenience
+    suitableFor: { type: [String] },
+    mouthType: { type: String },
+    lidType: { type: String },
+    dishwasherSafe: { type: Boolean },
+    carHolderFit: { type: Boolean }
+  },
+
   sku: {
     type: String,
     trim: true

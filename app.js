@@ -17,9 +17,9 @@ app.use(helmet());
 dotenv.config()
 
 app.use(cors({
-    origin: true, // This allows any domain to talk to your API
-    credentials: true,
-  }))
+  origin: ["https://bouncybucket.com", "https://www.bouncybucket.com", "http://localhost:3000"],
+  credentials: true,
+}));
 
 app.use(express.json())
 

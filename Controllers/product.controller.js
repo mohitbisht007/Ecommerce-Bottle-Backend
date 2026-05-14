@@ -159,58 +159,84 @@ export const createProduct = async (req, res) => {
       title,
       description = "",
       category,
-      compareAtPrice, // This can act as the "starting" strike-through price
+      compareAtPrice,
       tags = [],
-      variants = [], // Now expecting: [{colorName, colorCode, capacity, price, stock, images: []}]
+      variants = [],
       sku = "",
       featured = false,
+
+      specifications = {},
+      isCustomizable = false,
+      customizationOptions = {}
     } = req.body;
 
     if (!title || variants.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Title and at least one variant are required" });
+      return res.status(400).json({
+        message: "Title and at least one variant are required"
+      });
     }
 
     const slug = await generateUniqueSlug(title);
 
-    // 1. Calculate main price from the first variant (or cheapest)
-    const mainPrice = Number(variants[0].price);
+    // ✅ Normalize variants (important)
+    const normalizedVariants = variants.map((v) => ({
+      colorName: v.colorName || "",
+      colorCode: v.colorCode || "#000000",
+      capacity: v.capacity,
+      price: Number(v.price),
+      stock: Number(v.stock),
+      images: v.images || [],
+      engravingColorType: v.engravingColorType || "light"
+    }));
 
-    // 2. Calculate total stock across all sizes/colors
-    const totalStock = variants.reduce(
-      (acc, curr) => acc + Number(curr.stock),
+    // ✅ Price logic (better: use MIN price, not first)
+    const prices = normalizedVariants.map(v => v.price);
+    const mainPrice = Math.min(...prices);
+
+    // ✅ Total stock
+    const totalStock = normalizedVariants.reduce(
+      (acc, curr) => acc + curr.stock,
       0
     );
 
-    // 3. Set thumbnail from first variant
-    const thumbnail = variants[0]?.images[0] || "";
+    // ✅ Thumbnail fallback
+    const thumbnail =
+      normalizedVariants[0]?.images?.[0] || "";
 
     const product = await Product.create({
       title: title.trim(),
       slug,
       description,
       category,
-      price: mainPrice, // Base price for sorting
-      compareAtPrice: compareAtPrice ? Number(compareAtPrice) : undefined,
+
+      price: mainPrice,
+      compareAtPrice: compareAtPrice
+        ? Number(compareAtPrice)
+        : undefined,
+
       tags,
-      variants, // Includes capacity, price, and stock for each variant
+      variants: normalizedVariants,
       thumbnail,
       sku,
-      stock: totalStock, // Sum of all variant stocks
+
+      stock: totalStock,
       featured: Boolean(featured),
+
+      // ✅ NEW FIELDS
+      specifications,
+      isCustomizable: Boolean(isCustomizable),
+      customizationOptions
     });
 
     res.status(201).json(product);
+
   } catch (err) {
-    return res.status(400).json(err.message);
+    return res.status(400).json({ message: err.message });
   }
 };
 
-/**
- * PUT /api/admin/products/:id
- * Admin only
- */
+//Update Product
+
 export const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
@@ -220,29 +246,59 @@ export const updateProduct = async (req, res) => {
       data.slug = await generateUniqueSlug(data.title);
     }
 
-    // Recalculate based on variants if they are being updated
+    // ✅ Handle variants update properly
     if (data.variants && data.variants.length > 0) {
-      // Set price to the first variant's price
-      data.price = Number(data.variants[0].price);
 
-      // Recalculate total stock
-      data.stock = data.variants.reduce(
-        (acc, curr) => acc + Number(curr.stock),
+      const normalizedVariants = data.variants.map((v) => ({
+        colorName: v.colorName || "",
+        colorCode: v.colorCode || "#000000",
+        capacity: v.capacity,
+        price: Number(v.price),
+        stock: Number(v.stock),
+        images: v.images || [],
+        engravingColorType: v.engravingColorType || "light"
+      }));
+
+      // ✅ Use MIN price (important for sorting/filtering)
+      const prices = normalizedVariants.map(v => v.price);
+      data.price = Math.min(...prices);
+
+      // ✅ Total stock
+      data.stock = normalizedVariants.reduce(
+        (acc, curr) => acc + curr.stock,
         0
       );
 
-      // Update thumbnail
-      data.thumbnail = data.variants[0].images[0];
+      // ✅ Thumbnail update
+      data.thumbnail = normalizedVariants[0]?.images?.[0] || "";
+
+      data.variants = normalizedVariants;
+    }
+
+    // ✅ Ensure proper types
+    if (data.compareAtPrice) {
+      data.compareAtPrice = Number(data.compareAtPrice);
+    }
+
+    if (data.isCustomizable !== undefined) {
+      data.isCustomizable = Boolean(data.isCustomizable);
     }
 
     data.updatedAt = Date.now();
 
-    const updated = await Product.findByIdAndUpdate(id, data, { new: true });
-    if (!updated) return res.status(404).json({ message: "Product not found" });
+    const updated = await Product.findByIdAndUpdate(id, data, {
+      new: true,
+      runValidators: true // 🔥 important
+    });
+
+    if (!updated) {
+      return res.status(404).json({ message: "Product not found" });
+    }
 
     res.json(updated);
+
   } catch (err) {
-    return res.status(400).json(err.message);
+    return res.status(400).json({ message: err.message });
   }
 };
 
