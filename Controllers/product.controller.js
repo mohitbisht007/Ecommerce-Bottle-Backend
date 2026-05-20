@@ -73,8 +73,8 @@ export const productList = async (req, res) => {
       sort === "price_asc"
         ? { price: 1 }
         : sort === "price_desc"
-        ? { price: -1 }
-        : { createdAt: -1 };
+          ? { price: -1 }
+          : { createdAt: -1 };
 
     const [items, total] = await Promise.all([
       Product.find(filter).sort(sortObj).skip(skip).limit(Number(limit)),
@@ -180,22 +180,49 @@ export const createProduct = async (req, res) => {
 
     // ✅ Normalize variants (important)
     const normalizedVariants = variants.map((v) => ({
+      baseColorName: v.baseColorName || "",
       colorName: v.colorName || "",
       colorCode: v.colorCode || "#000000",
-      capacity: v.capacity,
-      price: Number(v.price),
-      stock: Number(v.stock),
+
       images: v.images || [],
-      engravingColorType: v.engravingColorType || "light"
+
+      engravingColorType:
+        v.engravingColorType || "light",
+
+      sizes: (v.sizes || []).map((s) => ({
+        capacity: s.capacity || "",
+
+        price: Number(s.price) || 0,
+
+        compareAtPrice: s.compareAtPrice
+          ? Number(s.compareAtPrice)
+          : undefined,
+
+        stock: Number(s.stock) || 0
+      }))
     }));
 
     // ✅ Price logic (better: use MIN price, not first)
-    const prices = normalizedVariants.map(v => v.price);
-    const mainPrice = Math.min(...prices);
+    const allPrices = normalizedVariants.flatMap(v =>
+      v.sizes.map(s => s.price)
+    );
+
+    const validPrices = allPrices.filter(
+      p => typeof p === "number" && p > 0
+    );
+
+    const mainPrice = validPrices.length
+      ? Math.min(...validPrices)
+      : 0;
 
     // ✅ Total stock
     const totalStock = normalizedVariants.reduce(
-      (acc, curr) => acc + curr.stock,
+      (total, variant) => {
+        return total + variant.sizes.reduce(
+          (sum, size) => sum + size.stock,
+          0
+        );
+      },
       0
     );
 
@@ -250,22 +277,49 @@ export const updateProduct = async (req, res) => {
     if (data.variants && data.variants.length > 0) {
 
       const normalizedVariants = data.variants.map((v) => ({
+        baseColorName: v.baseColorName || "",
         colorName: v.colorName || "",
         colorCode: v.colorCode || "#000000",
-        capacity: v.capacity,
-        price: Number(v.price),
-        stock: Number(v.stock),
+
         images: v.images || [],
-        engravingColorType: v.engravingColorType || "light"
+
+        engravingColorType:
+          v.engravingColorType || "light",
+
+        sizes: (v.sizes || []).map((s) => ({
+          capacity: s.capacity || "",
+
+          price: Number(s.price) || 0,
+
+          compareAtPrice: s.compareAtPrice
+            ? Number(s.compareAtPrice)
+            : undefined,
+
+          stock: Number(s.stock) || 0
+        }))
       }));
 
       // ✅ Use MIN price (important for sorting/filtering)
-      const prices = normalizedVariants.map(v => v.price);
-      data.price = Math.min(...prices);
+      const allPrices = normalizedVariants.flatMap(v =>
+        v.sizes.map(s => s.price)
+      );
+
+      const validPrices = allPrices.filter(
+        p => typeof p === "number" && p > 0
+      );
+
+      const mainPrice = validPrices.length
+        ? Math.min(...validPrices)
+        : 0;
 
       // ✅ Total stock
-      data.stock = normalizedVariants.reduce(
-        (acc, curr) => acc + curr.stock,
+      const totalStock = normalizedVariants.reduce(
+        (total, variant) => {
+          return total + variant.sizes.reduce(
+            (sum, size) => sum + size.stock,
+            0
+          );
+        },
         0
       );
 

@@ -1,16 +1,22 @@
 import mongoose from "mongoose";
 const variantSchema = new mongoose.Schema({
+  baseColorName: String,
   colorName: String, // e.g., "Ocean Blue"
   colorCode: String, // e.g., "#0000FF"
-  capacity: { type: String, required: true }, // e.g., "750ml"
-  price: { type: Number, required: true },    // Specific price for THIS size/color
-  stock: { type: Number, default: 0 },        // Specific stock for THIS size/color
-  images: [String],
   engravingColorType: { 
     type: String, 
     enum: ['light', 'dark'], 
     default: 'light' // 'light' means white font (for dark bottles)
-  }
+  },
+
+  sizes: [{
+    capacity: { type: String, required: true }, // e.g., "500ml"
+    price: { type: Number, required: true },
+    compareAtPrice: { type: Number },
+    stock: { type: Number, default: 0 }
+  }],
+  images: [String],
+  
 });
 
 const productSchema = new mongoose.Schema({
@@ -35,17 +41,13 @@ const productSchema = new mongoose.Schema({
 
   price: {
     type: Number,
-    required: true
+    required: false
   },
 
   category: {
     type: String,
     trim: true,
     default: '',
-  },
-
-  compareAtPrice: {
-    type: Number
   },
 
   specifications: {
@@ -85,15 +87,6 @@ const productSchema = new mongoose.Schema({
 
   variants: [variantSchema],
   thumbnail: String,
-
-  capacity: {
-    type: String
-  },
-
-  stock: {
-    type: Number,
-    default: 0
-  },
 
   featured: {
     type: Boolean,
