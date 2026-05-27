@@ -2,17 +2,22 @@ import nodemailer from "nodemailer";
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
+
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
 });
 
 export const sendOrderEmail = async (email, order, status) => {
   const isSuccess = status === "success";
 
   const mailOptions = {
-    from: `"Bouncy Bucket Luxury" <${process.env.EMAIL_USER}>`,
+    from: `"Bouncy Bucket" <${process.env.EMAIL_USER}>`,
     to: email,
     subject: isSuccess ? `Order Confirmed: #${order.razorpayOrderId}` : "Payment Action Required - Bouncy Bucket",
     html: isSuccess ? `
@@ -82,6 +87,5 @@ export const sendOrderEmail = async (email, order, status) => {
       </div>
     `,
   };
-
   return transporter.sendMail(mailOptions);
 };

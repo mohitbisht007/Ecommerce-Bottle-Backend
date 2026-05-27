@@ -49,15 +49,21 @@ export const productList = async (req, res) => {
       const variantFilter = {};
 
       if (color) {
-        // Convert "Purple,Blue" -> ["Purple", "Blue"]
+
         const colorArray = String(color).split(",");
-        variantFilter.colorName = { $in: colorArray };
+
+        filter["variants.baseColorName"] = {
+          $in: colorArray
+        };
       }
 
       if (capacity) {
-        // Convert "500ml,1L" -> ["500ml", "1L"]
+
         const capacityArray = String(capacity).split(",");
-        variantFilter.capacity = { $in: capacityArray };
+
+        filter["variants.sizes.capacity"] = {
+          $in: capacityArray
+        };
       }
 
       filter.variants = { $elemMatch: variantFilter };
