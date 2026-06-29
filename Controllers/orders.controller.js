@@ -106,13 +106,13 @@ export const verifyPayment = async (req, res) => {
     await order.save();
 
     // 4. Trigger Email (Passing "success" as the status)
-    sendOrderEmail(order.user.email, order, "success")
-      .then(() => {
-        console.log("Order email sent");
-      })
-      .catch((emailErr) => {
-        console.error("Email failed:", emailErr);
-      });
+    console.log("========== EMAIL DEBUG ==========");
+    console.log("User:", order.user);
+    console.log("Email:", order.user?.email);
+
+    await sendOrderEmail(order.user.email, order, "success");
+
+    console.log("Email sent successfully");
 
     return res.status(200).json({ success: true, message: "Payment verified" });
 

@@ -9,6 +9,7 @@ import reveiwsRoute from "./Routes/reveiws.routes.js"
 import storefrontRoute from "./Routes/storefront.routes.js"
 import orderRoute from "./Routes/orders.routes.js"
 import categoryRoutes from "./Routes/category.routes.js"
+import contactRoutes from "./Routes/contact.route.js"
 import helmet from "helmet"
 
 const app = express()
@@ -41,6 +42,7 @@ app.use("/api", userRouter)
 app.use("/api", productRouter)
 app.use("/api", reveiwsRoute)
 app.use("/api", storefrontRoute)
+app.use("/api", contactRoutes);
 
 app.get("/api/test", authenticateUser, (req, res) => {
     console.log(req.user)
