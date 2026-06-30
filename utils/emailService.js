@@ -1,31 +1,7 @@
-import nodemailer from "nodemailer";
-import dns from "dns";
-dns.setDefaultResultOrder("ipv4first");
+import { Resend } from "resend";
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
-  family: 4,
-  requireTLS: true,
 
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-
-  connectionTimeout: 30000,
-  greetingTimeout: 30000,
-  socketTimeout: 30000,
-});
-
-transporter.verify(function (error, success) {
-  if (error) {
-    console.error("SMTP VERIFY ERROR:", error);
-  } else {
-    console.log("SMTP Server is ready.");
-  }
-});
 
 export const sendOrderEmail = async (email, order, status) => {
   console.log(order.items)
@@ -102,7 +78,12 @@ export const sendOrderEmail = async (email, order, status) => {
       </div>
     `,
   };
-  return transporter.sendMail(mailOptions);
+  return resend.emails.send({
+  from: "BouncyBucket <sales@bouncybucket.com>",
+  to: mailOptions.to,
+  subject: mailOptions.subject,
+  html: mailOptions.html,
+});
 };
 
 
@@ -283,7 +264,12 @@ export const sendContactNotification = async (data) => {
     `,
   };
 
-  return transporter.sendMail(mailOptions);
+  return resend.emails.send({
+  from: "BouncyBucket <sales@bouncybucket.com>",
+  to: mailOptions.to,
+  subject: mailOptions.subject,
+  html: mailOptions.html,
+});
 };
 
 
@@ -530,5 +516,10 @@ export const sendContactAutoReply = async (data) => {
     `,
   };
 
-  return transporter.sendMail(mailOptions);
+  return resend.emails.send({
+  from: "BouncyBucket <sales@bouncybucket.com>",
+  to: mailOptions.to,
+  subject: mailOptions.subject,
+  html: mailOptions.html,
+});
 };
