@@ -25,7 +25,7 @@ export const sendOrderEmail = async (email, order, status) => {
       
       // Inject it into our attachments array
       emailAttachments.push({
-        filename: `Invoice_${`#BB-${{cleanOrderId}}` || 'Order'}.pdf`,
+        filename: `Invoice_BB-${cleanOrderId}.pdf`,
         content: pdfBuffer,
         contentType: 'application/pdf'
       });
@@ -37,7 +37,7 @@ export const sendOrderEmail = async (email, order, status) => {
   const mailOptions = {
     from: `"Bouncy Bucket" <${process.env.EMAIL_USER}>`,
     to: email,
-    subject: isSuccess ? `Order Confirmed: ${`#BB-${{cleanOrderId}}`}` : "Payment Action Required - Bouncy Bucket",
+    subject: isSuccess ? `Order Confirmed: #BB-${cleanOrderId}` : "Payment Action Required - Bouncy Bucket",
     html: isSuccess ? `
       <div style="background-color: #f8fafc; padding: 40px 10px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
         <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">

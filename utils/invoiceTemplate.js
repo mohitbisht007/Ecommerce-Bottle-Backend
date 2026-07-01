@@ -184,14 +184,18 @@ export const generateInvoiceHTML = (orderData) => {
         </tr>
       </table>
 
-      <table class="wrapper-table footer">
+      <table class="wrapper-table" style="margin-top: 50px; border-top: 1px solid #e2e8f0; padding-top: 20px;">
         <tr>
-          <td style="width: 60%; vertical-align: bottom;">
-            Thank you for your business! For support, email support@bouncybucket.com
-          </td>
-          <td style="width: 40%; text-align: right; font-size: 12px; color: #334155;">
-            <p style="margin: 0 0 40px 0; font-size: 10px; color: #94a3b8; text-transform: uppercase;">For Keen Services</p>
-            <strong>Authorised Signatory</strong>
+          <td style="text-align: center; font-size: 11px; color: #94a3b8; line-height: 1.8;">
+            <p style="margin: 0 0 4px 0; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">
+              This is a digitally generated invoice
+            </p>
+            <p style="margin: 0; color: #94a3b8;">
+              No physical signature is required. Tax computed electronically on behalf of <strong>Bouncy Bucket</strong>.
+            </p>
+            <p style="margin: 8px 0 0 0; color: #cbd5e1; font-size: 10px;">
+              Thank you for your business! For queries or support, reach out to sales@bouncybucket.com
+            </p>
           </td>
         </tr>
       </table>
