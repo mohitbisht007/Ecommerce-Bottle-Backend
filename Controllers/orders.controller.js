@@ -4,6 +4,8 @@ import Order from "../Schemas/order.schema.js";
 import User from "../Schemas/user.schema.js";
 import { sendOrderEmail } from "../utils/emailService.js";
 import dotenv from "dotenv";
+import htmlPdf from "html-pdf-node";
+import { generateInvoiceHTML } from "../utils/invoiceTemplate.js";
 
 dotenv.config();
 
@@ -184,5 +186,72 @@ export const updateOrderStatus = async (req, res) => {
     res.status(200).json({ success: true, order });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+export const getOrderDetails = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    // Fetch the order
+    const order = await Order.findById(orderId);
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order record not found" });
+    }
+
+    // Security Verification: Ensure the customer logged in owns this order record
+    if (order.user.toString() !== req.user.id) {
+      return res.status(403).json({ success: false, message: "Access denied: Unauthorized view request" });
+    }
+
+    res.status(200).json({
+      success: true,
+      order,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// --- FOR CUSTOMERS: Stream and download the tax invoice PDF ---
+export const getOrderInvoice = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await Order.findById(orderId);
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order record not found" });
+    }
+
+    // Security Verification: Ensure the customer logged in owns this order to download invoice
+    if (order.user.toString() !== req.user.id) {
+      return res.status(403).json({ success: false, message: "Access denied: Unauthorized download request" });
+    }
+
+    // Compile the fresh corporate layout
+    const htmlContent = generateInvoiceHTML(order);
+    
+    const fileOptions = { format: "A4" };
+    const fileSource = { content: htmlContent };
+
+    // Convert HTML directly to an in-memory PDF buffer stream
+    const pdfBuffer = await htmlPdf.generatePdf(fileSource, fileOptions);
+
+    const cleanId = (order.razorpayOrderId || order._id).replace(/^order_/, "").toUpperCase();
+
+    // Set binary layout headers to prompt a clean file download on the browser
+    res.writeHead(200, {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename=Invoice_BB-${cleanId}.pdf`,
+      "Content-Length": pdfBuffer.length
+    });
+    
+    return res.end(pdfBuffer);
+  } catch (error) {
+    console.error("INVOICE GENERATION BACKEND ERROR:", error);
+    res.status(500).json({ success: false, message: "Could not compile tax document layout streams." });
   }
 };

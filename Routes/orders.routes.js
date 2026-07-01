@@ -1,5 +1,5 @@
 import express from "express";
-import { createOrder, verifyPayment, getMyOrders, getAllOrdersAdmin, updateOrderStatus } from "../Controllers/orders.controller.js";
+import { createOrder, verifyPayment, getMyOrders, getAllOrdersAdmin, updateOrderStatus, getOrderInvoice, getOrderDetails } from "../Controllers/orders.controller.js";
 import { authenticateUser, authorizeAdmin } from "../Middlewares/authenticateUser.js";
 
 const router = express.Router();
@@ -9,6 +9,8 @@ const router = express.Router();
  */
 router.post("/checkout", createOrder);
 router.get("/my-orders", authenticateUser, getMyOrders);
+router.get("/:orderId", authenticateUser, getOrderDetails); // Matches: fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/${id}`)
+router.get("/invoice/:orderId", authenticateUser, getOrderInvoice); // Matches: fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/invoice/${order._id}`)
 
 /** * 2. Verify Payment (Signature check)
  * Path: POST /api/orders/verify 

@@ -82,3 +82,71 @@ export const updateSettings = async (req, res) => {
     res.status(400).json({ message: err.message });
   }
 };
+
+import WatchAndBuy from "../Schemas/watchAndBuy.schema.js";
+import Product from "../Schemas/product.schema.js";
+
+// --- FOR ADMINS: Fetch brief list of all products to fill the select dropdown ---
+export const getAdminProductsList = async (req, res) => {
+  try {
+    // Only fetch ID and Title to keep the load minimal
+    const products = await Product.find({}, "_id title").sort({ title: 1 });
+    res.status(200).json({ success: true, products });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// --- FOR ADMINS: Create a new Watch & Buy Reel Node ---
+export const addReel = async (req, res) => {
+  try {
+    const { videoUrl, thumbnailUrl, linkedProduct, caption } = req.body;
+
+    if (!videoUrl || !linkedProduct) {
+      return res.status(400).json({ success: false, message: "Video URL and Linked Product are required." });
+    }
+
+    const newReel = await WatchAndBuy.create({
+      videoUrl,
+      thumbnailUrl,
+      linkedProduct,
+      caption
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Reel added successfully to Watch & Buy inventory.",
+      reel: newReel
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// --- GLOBAL: Fetch all reels for the storefront landing stream ---
+export const getActiveReelsStream = async (req, res) => {
+  try {
+    const reels = await WatchAndBuy.find()
+      .populate("linkedProduct", "title price rating reviewsCount thumbnail image variants")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({ success: true, count: reels.length, reels });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const deleteReel = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await WatchAndBuy.findByIdAndDelete(id);
+    
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: "Reel not found." });
+    }
+    
+    res.status(200).json({ success: true, message: "Reel removed from stream rotation." });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
