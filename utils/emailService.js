@@ -1,16 +1,43 @@
 import { Resend } from "resend";
 const resend = new Resend(process.env.RESEND_API_KEY);
-
+import htmlPdf from "html-pdf-node";
+import { generateInvoiceHTML } from "./invoiceTemplate.js";
 
 
 export const sendOrderEmail = async (email, order, status) => {
   console.log(order.items)
   const isSuccess = status === "success";
+  const rawOrderId = order.razorpayOrderId || orderData._id || '';
+  const cleanOrderId = rawOrderId.replace(/^order_/, '').toUpperCase();
+
+  let emailAttachments = [];
+
+  if (isSuccess) {
+    try {
+      // Create the HTML representation of your invoice
+      const invoiceHTML = generateInvoiceHTML(order);
+      
+      const fileOptions = { format: 'A4' };
+      const fileSource = { content: invoiceHTML };
+
+      // Compile it to an in-memory buffer
+      const pdfBuffer = await htmlPdf.generatePdf(fileSource, fileOptions);
+      
+      // Inject it into our attachments array
+      emailAttachments.push({
+        filename: `Invoice_${`#BB-${{cleanOrderId}}` || 'Order'}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      });
+    } catch (pdfError) {
+      console.error("Failed to compile or build invoice attachment buffer:", pdfError);
+    }
+  }
 
   const mailOptions = {
     from: `"Bouncy Bucket" <${process.env.EMAIL_USER}>`,
     to: email,
-    subject: isSuccess ? `Order Confirmed: #${order.razorpayOrderId}` : "Payment Action Required - Bouncy Bucket",
+    subject: isSuccess ? `Order Confirmed: ${`#BB-${{cleanOrderId}}`}` : "Payment Action Required - Bouncy Bucket",
     html: isSuccess ? `
       <div style="background-color: #f8fafc; padding: 40px 10px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
         <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">
@@ -26,7 +53,7 @@ export const sendOrderEmail = async (email, order, status) => {
             
             <div style="background: #f1f5f9; padding: 20px; border-radius: 6px; margin: 30px 0;">
               <p style="margin: 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Order Number</p>
-              <p style="margin: 5px 0 0 0; color: #0f172a; font-weight: bold; font-size: 16px;">#${order.razorpayOrderId}</p>
+              <p style="margin: 5px 0 0 0; color: #0f172a; font-weight: bold; font-size: 16px;">#BB-${cleanOrderId}</p>
             </div>
 
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
@@ -83,6 +110,7 @@ export const sendOrderEmail = async (email, order, status) => {
   to: mailOptions.to,
   subject: mailOptions.subject,
   html: mailOptions.html,
+  attachments: emailAttachments
 });
 };
 

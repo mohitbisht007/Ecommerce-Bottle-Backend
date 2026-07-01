@@ -110,11 +110,16 @@ export const verifyPayment = async (req, res) => {
     console.log("User:", order.user);
     console.log("Email:", order.user?.email);
 
-    await sendOrderEmail(order.user.email, order, "success");
+    try {
+      await sendOrderEmail(order.user.email, order, "success");
+    } catch (err) {
+      console.error("Email Error:", err);
+    }
 
-    console.log("Email sent successfully");
-
-    return res.status(200).json({ success: true, message: "Payment verified" });
+    return res.status(200).json({
+      success: true,
+      message: "Payment verified",
+    });
 
   } catch (error) {
     console.error("VERIFY ERROR:", error);
