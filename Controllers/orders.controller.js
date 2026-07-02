@@ -43,6 +43,11 @@ export const createOrder = async (req, res) => {
     }
 
     const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const amountInPaise = Math.round(totalAmount * 100);
+
+    if (amountInPaise < 100) {
+      return res.status(400).json({ error: "Minimum order amount is ₹1 (100 paise)" });
+    }
 
     // RAZORPAY SAFETY CHECK: If this crashes, it's usually because keys are missing in .env
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
@@ -51,12 +56,21 @@ export const createOrder = async (req, res) => {
     }
 
     const options = {
-      amount: Math.round(totalAmount * 100),
+      amount: amountInPaise,
       currency: "INR",
       receipt: `rcpt_${Date.now()}`,
     };
 
-    const rzpOrder = await razorpay.orders.create(options);
+    let rzpOrder;
+    try {
+      rzpOrder = await razorpay.orders.create(options);
+    } catch (rzpErr) {
+      console.error("RAZORPAY API ERROR:", rzpErr);
+      if (rzpErr.statusCode === 401) {
+        return res.status(401).json({ error: "Razorpay authentication failed. Check API keys." });
+      }
+      return res.status(500).json({ error: rzpErr.error?.description || "Failed to create Razorpay order" });
+    }
 
     const newOrder = await Order.create({
       user: userId,
@@ -69,8 +83,10 @@ export const createOrder = async (req, res) => {
 
     res.status(200).json({
       success: true,
+      order_id: rzpOrder.id,
       orderId: rzpOrder.id,
       amount: rzpOrder.amount,
+      currency: rzpOrder.currency,
       internalOrderId: newOrder._id,
     });
   } catch (err) {
@@ -83,6 +99,14 @@ export const createOrder = async (req, res) => {
 export const verifyPayment = async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ success: false, message: "Missing payment verification fields" });
+    }
+
+    if (!process.env.RAZORPAY_KEY_SECRET) {
+      return res.status(500).json({ error: "Payment gateway configuration missing" });
+    }
 
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSign = crypto

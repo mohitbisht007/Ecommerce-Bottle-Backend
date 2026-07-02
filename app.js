@@ -8,6 +8,7 @@ import cors from "cors"
 import reveiwsRoute from "./Routes/reveiws.routes.js"
 import storefrontRoute from "./Routes/storefront.routes.js"
 import orderRoute from "./Routes/orders.routes.js"
+import { createOrder, verifyPayment } from "./Controllers/orders.controller.js"
 import categoryRoutes from "./Routes/category.routes.js"
 import contactRoutes from "./Routes/contact.route.js"
 import helmet from "helmet"
@@ -36,6 +37,8 @@ app.get("/health", (req, res) => {
 });
 
 app.use("/api/orders", orderRoute)
+app.post("/api/create-order", createOrder)
+app.post("/api/verify-payment", verifyPayment)
 app.use("/api", categoryRoutes);
 
 app.use("/api", userRouter)

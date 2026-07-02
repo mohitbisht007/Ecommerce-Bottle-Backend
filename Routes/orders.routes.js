@@ -4,19 +4,14 @@ import { authenticateUser, authorizeAdmin } from "../Middlewares/authenticateUse
 
 const router = express.Router();
 
-/** * 1. Initiate Order 
- * Path: POST /api/orders/checkout 
- */
+/** Standard Razorpay aliases (also available at /api/create-order and /api/verify-payment) */
 router.post("/checkout", createOrder);
-router.get("/my-orders", authenticateUser, getMyOrders);
-router.get("/:orderId", authenticateUser, getOrderDetails); // Matches: fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/${id}`)
+router.post("/verify", verifyPayment);
 router.get("/invoice/:orderId", authenticateUser, getOrderInvoice); // Matches: fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/invoice/${order._id}`)
 
-/** * 2. Verify Payment (Signature check)
- * Path: POST /api/orders/verify 
- */
-router.post("/verify", verifyPayment);
+router.get("/my-orders", authenticateUser, getMyOrders);
 
+router.get("/:orderId", authenticateUser, getOrderDetails); // Matches: fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/${id}`)
 
 // ADmin
 router.get("/admin/all", authenticateUser, authorizeAdmin, getAllOrdersAdmin);
