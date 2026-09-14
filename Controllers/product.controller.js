@@ -75,12 +75,13 @@ export const productList = async (req, res) => {
 
     // 3. Sorting and Pagination
     const skip = (Number(page) - 1) * Number(limit);
-    const sortObj =
-      sort === "price_asc"
-        ? { price: 1 }
-        : sort === "price_desc"
-          ? { price: -1 }
-          : { createdAt: -1 };
+    const sortObj = {
+  ...(sort === "price_asc"
+    ? { price: 1 }
+    : sort === "price_desc"
+      ? { price: -1 }
+      : { createdAt: -1 }),
+};
 
     const [items, total] = await Promise.all([
       Product.find(filter).sort(sortObj).skip(skip).limit(Number(limit)),
