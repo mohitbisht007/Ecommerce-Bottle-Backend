@@ -1,6 +1,6 @@
 import express from "express";
 import { 
-  getBanners, addBanner, deleteBanner, 
+  getBanners, addBanner, deleteBanner, updateBanner,
   getSettings, updateSettings, 
   addReel, getActiveReelsStream, getAdminProductsList, deleteReel // Added missing imports
 } from "../Controllers/storefront.controller.js";
@@ -17,6 +17,7 @@ router.get("/storefront/settings", getSettings);
 router.post("/storefront/banners", authenticateUser, authorizeAdmin, addBanner);
 router.delete("/storefront/banners/:id", authenticateUser, authorizeAdmin, deleteBanner);
 router.patch("/storefront/settings", authenticateUser, authorizeAdmin, updateSettings);
+router.put("/storefront/banners/edit/:id", authenticateUser, authorizeAdmin, updateBanner)
 
 // Watch & Buy Admin Routes
 router.get("/storefront/admin/products", authenticateUser, authorizeAdmin, getAdminProductsList); // Dropdown fetch

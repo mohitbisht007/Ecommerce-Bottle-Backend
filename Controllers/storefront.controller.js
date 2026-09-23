@@ -31,6 +31,31 @@ export const deleteBanner = async (req, res) => {
   }
 };
 
+export const updateBanner = async (req, res) => {
+  try {
+    const updatedBanner = await Banner.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
+
+    if (!updatedBanner) {
+      return res.status(404).json({
+        message: "Banner not found",
+      });
+    }
+
+    res.json(updatedBanner);
+  } catch (err) {
+    res.status(400).json({
+      message: err.message,
+    });
+  }
+};
+
 // --- SETTINGS METHODS (Announcement Bar) ---
 
 // Note: Usually we store settings in a "Settings" collection with a fixed ID
