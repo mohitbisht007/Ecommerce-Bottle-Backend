@@ -12,6 +12,7 @@ import { createOrder, verifyPayment } from "./Controllers/orders.controller.js"
 import categoryRoutes from "./Routes/category.routes.js"
 import contactRoutes from "./Routes/contact.route.js"
 import helmet from "helmet"
+import { getShiprocketToken } from "./utils/shiprocket.js"
 
 const app = express()
 app.use(helmet());
@@ -34,6 +35,26 @@ mongoose.connect(process.env.MONGO_URI)
 
 app.get("/health", (req, res) => {
   res.status(200).send("Server is healthy");
+});
+
+app.get("/api/shiprocket/test", async (req, res) => {
+  try {
+    const token = await getShiprocketToken();
+
+    res.status(200).json({
+      success: true,
+      message: "Shiprocket authentication successful",
+      tokenReceived: !!token,
+    });
+  } catch (error) {
+    console.error("Shiprocket test failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Shiprocket authentication failed",
+      error: error.message,
+    });
+  }
 });
 
 app.use("/api/orders", orderRoute)
