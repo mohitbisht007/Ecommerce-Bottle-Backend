@@ -6,6 +6,8 @@ import { sendOrderEmail } from "../utils/emailService.js";
 import dotenv from "dotenv";
 import htmlPdf from "html-pdf-node";
 import { generateInvoiceHTML } from "../utils/invoiceTemplate.js";
+import { createTestShiprocketShipment } from "../utils/shiprocket.js";
+import Coupon from "../Schemas/coupon.schema.js";
 
 dotenv.config();
 
@@ -18,43 +20,213 @@ const razorpay = new Razorpay({
 // Replace your Step 1: Create Order with this:
 export const createOrder = async (req, res) => {
   try {
-    const { items, address, email } = req.body;
+    const {
+      items,
+      address,
+      email,
+      couponCode,
+    } = req.body;
+
     let userId;
 
+    // -----------------------------
+    // 1. IDENTIFY USER
+    // -----------------------------
     if (req.user && req.user.id) {
       userId = req.user.id;
     } else {
       const cleanEmail = email.toLowerCase().trim();
-      let guestUser = await User.findOne({ email: cleanEmail });
+
+      let guestUser = await User.findOne({
+        email: cleanEmail,
+      });
 
       if (!guestUser) {
         guestUser = await User.create({
           name: address.name,
           email: cleanEmail,
-          isGuest: true, // This now tells the schema to skip password validation
+          isGuest: true,
           authProvider: "local",
-          addresses: [{
-            ...address,
-            email: cleanEmail // addressSchema requires 'email'
-          }]
+          addresses: [
+            {
+              ...address,
+              email: cleanEmail,
+            },
+          ],
         });
       }
+
       userId = guestUser._id;
     }
 
-    const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const amountInPaise = Math.round(totalAmount * 100);
+    // -----------------------------
+    // 2. CALCULATE CART TOTAL
+    // -----------------------------
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        error: "Cart is empty",
+      });
+    }
+
+    const cartTotal = items.reduce(
+      (sum, item) =>
+        sum +
+        Number(item.price || 0) *
+        Number(item.quantity || 0),
+      0
+    );
+
+    if (cartTotal <= 0) {
+      return res.status(400).json({
+        error: "Invalid cart total",
+      });
+    }
+
+    // -----------------------------
+    // 3. VALIDATE COUPON SERVER-SIDE
+    // -----------------------------
+    let appliedCoupon = null;
+    let couponDiscount = 0;
+
+    if (couponCode) {
+      const normalizedCode = couponCode
+        .trim()
+        .toUpperCase();
+
+      const coupon = await Coupon.findOne({
+        code: normalizedCode,
+        isActive: true,
+      });
+
+      if (!coupon) {
+        return res.status(400).json({
+          error: "Invalid or inactive coupon",
+        });
+      }
+
+      // Start date
+      if (
+        coupon.startDate &&
+        new Date() < coupon.startDate
+      ) {
+        return res.status(400).json({
+          error: "This coupon is not active yet",
+        });
+      }
+
+      // Expiry
+      if (
+        coupon.expiryDate &&
+        new Date() > coupon.expiryDate
+      ) {
+        return res.status(400).json({
+          error: "This coupon has expired",
+        });
+      }
+
+      // Usage limit
+      if (
+        coupon.usageLimit !== null &&
+        coupon.usedCount >= coupon.usageLimit
+      ) {
+        return res.status(400).json({
+          error: "This coupon has reached its usage limit",
+        });
+      }
+
+      // Total quantity
+      const totalItems = items.reduce(
+        (total, item) =>
+          total + Number(item.quantity || 0),
+        0
+      );
+
+      // Minimum items
+      if (
+        totalItems < coupon.minimumItems
+      ) {
+        return res.status(400).json({
+          error: `Add at least ${coupon.minimumItems} bottles to use this coupon`,
+        });
+      }
+
+      // Minimum cart value
+      if (
+        cartTotal < coupon.minimumCartValue
+      ) {
+        return res.status(400).json({
+          error: `Minimum cart value of ₹${coupon.minimumCartValue} required`,
+        });
+      }
+
+      // -----------------------------
+      // CALCULATE DISCOUNT
+      // -----------------------------
+      if (coupon.discountType === "percentage") {
+        couponDiscount =
+          (cartTotal * coupon.discountValue) /
+          100;
+
+        if (
+          coupon.maximumDiscount !== null &&
+          couponDiscount >
+            coupon.maximumDiscount
+        ) {
+          couponDiscount =
+            coupon.maximumDiscount;
+        }
+      }
+
+      if (coupon.discountType === "fixed") {
+        couponDiscount =
+          coupon.discountValue;
+      }
+
+      // Never discount more than cart
+      couponDiscount = Math.min(
+        couponDiscount,
+        cartTotal
+      );
+
+      appliedCoupon = coupon;
+    }
+
+    // -----------------------------
+    // 4. FINAL PAYABLE AMOUNT
+    // -----------------------------
+    const finalAmount =
+      cartTotal - couponDiscount;
+
+    const amountInPaise =
+      Math.round(finalAmount * 100);
 
     if (amountInPaise < 100) {
-      return res.status(400).json({ error: "Minimum order amount is ₹1 (100 paise)" });
+      return res.status(400).json({
+        error:
+          "Minimum order amount is ₹1 (100 paise)",
+      });
     }
 
-    // RAZORPAY SAFETY CHECK: If this crashes, it's usually because keys are missing in .env
-    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      console.error("CRITICAL: Razorpay Keys are missing in .env file");
-      return res.status(500).json({ error: "Payment gateway configuration missing" });
+    // -----------------------------
+    // 5. RAZORPAY CONFIG CHECK
+    // -----------------------------
+    if (
+      !process.env.RAZORPAY_KEY_ID ||
+      !process.env.RAZORPAY_KEY_SECRET
+    ) {
+      console.error(
+        "CRITICAL: Razorpay Keys are missing in .env file"
+      );
+
+      return res.status(500).json({
+        error:
+          "Payment gateway configuration missing",
+      });
     }
 
+    // -----------------------------
+    // 6. CREATE RAZORPAY ORDER
+    // -----------------------------
     const options = {
       amount: amountInPaise,
       currency: "INR",
@@ -62,36 +234,86 @@ export const createOrder = async (req, res) => {
     };
 
     let rzpOrder;
+
     try {
-      rzpOrder = await razorpay.orders.create(options);
+      rzpOrder =
+        await razorpay.orders.create(options);
     } catch (rzpErr) {
-      console.error("RAZORPAY API ERROR:", rzpErr);
+      console.error(
+        "RAZORPAY API ERROR:",
+        rzpErr
+      );
+
       if (rzpErr.statusCode === 401) {
-        return res.status(401).json({ error: "Razorpay authentication failed. Check API keys." });
+        return res.status(401).json({
+          error:
+            "Razorpay authentication failed. Check API keys.",
+        });
       }
-      return res.status(500).json({ error: rzpErr.error?.description || "Failed to create Razorpay order" });
+
+      return res.status(500).json({
+        error:
+          rzpErr.error?.description ||
+          "Failed to create Razorpay order",
+      });
     }
 
+    // -----------------------------
+    // 7. SAVE ORDER
+    // -----------------------------
     const newOrder = await Order.create({
       user: userId,
       items,
       shippingAddress: address,
-      totalAmount,
+
+      // IMPORTANT:
+      // This is now the discounted amount.
+      totalAmount: finalAmount,
+
       razorpayOrderId: rzpOrder.id,
+
       paymentStatus: "Pending",
+
+      coupon: appliedCoupon
+        ? {
+            code: appliedCoupon.code,
+            discount: couponDiscount,
+          }
+        : undefined,
     });
 
-    res.status(200).json({
+    // -----------------------------
+    // 8. SEND RESPONSE
+    // -----------------------------
+    return res.status(200).json({
       success: true,
+
       order_id: rzpOrder.id,
       orderId: rzpOrder.id,
+
       amount: rzpOrder.amount,
       currency: rzpOrder.currency,
+
       internalOrderId: newOrder._id,
+
+      // Useful for frontend confirmation/debugging
+      originalAmount: cartTotal,
+      discount: couponDiscount,
+      finalAmount,
+      coupon: appliedCoupon
+        ? appliedCoupon.code
+        : null,
     });
+
   } catch (err) {
-    console.error("CHECKOUT ERROR LOG:", err); // THIS WILL SHOW IN YOUR TERMINAL
-    res.status(500).json({ error: err.message });
+    console.error(
+      "CHECKOUT ERROR LOG:",
+      err
+    );
+
+    return res.status(500).json({
+      error: err.message,
+    });
   }
 };
 
@@ -129,6 +351,22 @@ export const verifyPayment = async (req, res) => {
     // 3. Update Status
     order.paymentStatus = "Paid";
     order.razorpayPaymentId = razorpay_payment_id;
+
+    if (process.env.SHIPROCKET_TEST_MODE === "true") {
+      try {
+        const testShipment = await createTestShiprocketShipment(order);
+
+        order.shiprocket = testShipment;
+
+        console.log("TEST SHIPROCKET SHIPMENT CREATED:", testShipment);
+      } catch (shiprocketError) {
+        console.error(
+          "TEST SHIPROCKET ERROR:",
+          shiprocketError.message
+        );
+      }
+    }
+
     await order.save();
 
     // 4. Trigger Email (Passing "success" as the status)
@@ -257,7 +495,7 @@ export const getOrderInvoice = async (req, res) => {
 
     // Compile the fresh corporate layout
     const htmlContent = generateInvoiceHTML(order);
-    
+
     const fileOptions = { format: "A4" };
     const fileSource = { content: htmlContent };
 
@@ -272,10 +510,45 @@ export const getOrderInvoice = async (req, res) => {
       "Content-Disposition": `attachment; filename=Invoice_BB-${cleanId}.pdf`,
       "Content-Length": pdfBuffer.length
     });
-    
+
     return res.end(pdfBuffer);
   } catch (error) {
     console.error("INVOICE GENERATION BACKEND ERROR:", error);
     res.status(500).json({ success: false, message: "Could not compile tax document layout streams." });
+  }
+};
+
+
+export const testShiprocketShipment = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await Order.findById(orderId);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    const testShipment = await createTestShiprocketShipment(order);
+
+    order.shiprocket = testShipment;
+
+    await order.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Test Shiprocket shipment added to order",
+      order,
+    });
+  } catch (error) {
+    console.error("TEST SHIPROCKET ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };

@@ -24,6 +24,16 @@ const orderSchema = new mongoose.Schema({
     required: true,
   },
 
+  coupon: {
+    code: {
+      type: String,
+    },
+    discount: {
+      type: Number,
+      default: 0,
+    },
+  },
+
   // Invoice Details
   invoiceNumber: {
     type: String,
@@ -70,6 +80,30 @@ const orderSchema = new mongoose.Schema({
       "Cancelled",
     ],
     default: "Processing",
+  },
+
+  shiprocket: {
+    orderId: {
+      type: String,
+    },
+    shipmentId: {
+      type: String,
+    },
+    awbCode: {
+      type: String,
+    },
+    courierName: {
+      type: String,
+    },
+    status: {
+      type: String,
+    },
+    trackingUrl: {
+      type: String,
+    },
+    lastUpdatedAt: {
+      type: Date,
+    },
   },
 
   createdAt: {

@@ -1,5 +1,5 @@
 import express from "express";
-import { createOrder, verifyPayment, getMyOrders, getAllOrdersAdmin, updateOrderStatus, getOrderInvoice, getOrderDetails } from "../Controllers/orders.controller.js";
+import { createOrder, verifyPayment, getMyOrders, getAllOrdersAdmin, updateOrderStatus, getOrderInvoice, getOrderDetails, testShiprocketShipment } from "../Controllers/orders.controller.js";
 import { authenticateUser, authorizeAdmin } from "../Middlewares/authenticateUser.js";
 
 const router = express.Router();
@@ -16,5 +16,12 @@ router.get("/:orderId", authenticateUser, getOrderDetails); // Matches: fetch(`$
 // ADmin
 router.get("/admin/all", authenticateUser, authorizeAdmin, getAllOrdersAdmin);
 router.put("/admin/update/:orderId", authenticateUser, authorizeAdmin, updateOrderStatus);
+
+router.post(
+  "/admin/test-shiprocket/:orderId",
+  authenticateUser,
+  authorizeAdmin,
+  testShiprocketShipment
+);
 
 export default router;
