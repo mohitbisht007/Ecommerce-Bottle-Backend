@@ -52,7 +52,15 @@ const orderSchema = new mongoose.Schema({
   // Payment Details
   paymentMethod: {
     type: String,
-    default: "Razorpay",
+    enum: [
+      "Razorpay",
+      "Razorpay QR",
+      "Cash",
+      "Bank Transfer",
+      "UPI",
+      "Manual"
+    ],
+    default: "Razorpay"
   },
 
   razorpayOrderId: {

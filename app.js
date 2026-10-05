@@ -14,6 +14,8 @@ import contactRoutes from "./Routes/contact.route.js"
 import helmet from "helmet"
 import { getShiprocketToken } from "./utils/shiprocket.js"
 import couponRouter from "./Routes/coupon.routes.js";
+import customerRouter from "./Routes/customer.routes.js";
+import stockNotificationRouter from "./Routes/stockNotification.routes.js";
 
 const app = express()
 app.use(helmet());
@@ -69,6 +71,11 @@ app.use("/api", reveiwsRoute)
 app.use("/api", storefrontRoute)
 app.use("/api", contactRoutes);
 app.use("/api/coupons", couponRouter);
+app.use("/api/customers", customerRouter);
+app.use(
+  "/api/stock-notifications",
+  stockNotificationRouter
+);
 
 app.get("/api/test", authenticateUser, (req, res) => {
     console.log(req.user)

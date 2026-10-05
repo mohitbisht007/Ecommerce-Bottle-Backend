@@ -551,3 +551,122 @@ export const sendContactAutoReply = async (data) => {
   html: mailOptions.html,
 });
 };
+
+
+export const sendStockNotificationRequest = async (data) => {
+  return resend.emails.send({
+    from: "BouncyBucket <sales@bouncybucket.com>",
+    to: process.env.EMAIL_USER,
+    subject: `🔔 Stock Alert Request • ${data.productTitle}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:30px;">
+        <h2>New Stock Notification Request</h2>
+
+        <p>A customer wants to be notified when this product is back in stock.</p>
+
+        <hr />
+
+        <p><strong>Product:</strong> ${data.productTitle}</p>
+        <p><strong>Color:</strong> ${data.color || "N/A"}</p>
+        <p><strong>Capacity:</strong> ${data.capacity}</p>
+
+        <h3>Customer</h3>
+
+        <p><strong>Email:</strong> ${data.email}</p>
+        <p><strong>Phone:</strong> ${data.phone || "Not provided"}</p>
+
+        <hr />
+
+        <p>
+          <strong>Requested:</strong>
+          ${new Date().toLocaleString("en-IN")}
+        </p>
+      </div>
+    `,
+  });
+};
+
+export const sendBackInStockEmail = async (data) => {
+  return resend.emails.send({
+    from: "BouncyBucket <sales@bouncybucket.com>",
+    to: data.email,
+    subject: `🎉 ${data.productTitle} is back in stock!`,
+    html: `
+      <div style="background:#f8fafc;padding:40px 10px;font-family:Arial,sans-serif;">
+
+        <div style="max-width:600px;margin:auto;background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #e2e8f0;">
+
+          <div style="background:#0f172a;padding:30px;text-align:center;">
+            <h1 style="color:#ffffff;margin:0;letter-spacing:3px;">
+              BOUNCYBUCKET
+            </h1>
+
+            <p style="color:#94a3b8;margin:10px 0 0;">
+              Back in Stock
+            </p>
+          </div>
+
+          <div style="padding:40px;">
+
+            <h2 style="color:#0f172a;margin-top:0;">
+              Good news! 🎉
+            </h2>
+
+            <p style="color:#475569;line-height:1.7;">
+              The product you were waiting for is back in stock.
+            </p>
+
+            <div style="background:#f8fafc;border-radius:8px;padding:20px;margin:25px 0;">
+
+              <p style="margin:0;color:#64748b;font-size:12px;text-transform:uppercase;">
+                Product
+              </p>
+
+              <h3 style="margin:8px 0;color:#0f172a;">
+                ${data.productTitle}
+              </h3>
+
+              <p style="margin:5px 0;color:#475569;">
+                ${data.color || ""}
+                ${data.color && data.capacity ? " • " : ""}
+                ${data.capacity}
+              </p>
+
+            </div>
+
+            <div style="text-align:center;margin-top:30px;">
+
+              <a
+                href="${data.productUrl}"
+                style="
+                  display:inline-block;
+                  background:#0f172a;
+                  color:#ffffff;
+                  padding:15px 30px;
+                  text-decoration:none;
+                  border-radius:6px;
+                  font-weight:bold;
+                "
+              >
+                Shop Now
+              </a>
+
+            </div>
+
+          </div>
+
+          <div style="background:#f8fafc;padding:25px;text-align:center;border-top:1px solid #e2e8f0;">
+
+            <p style="margin:0;color:#94a3b8;font-size:12px;">
+              © ${new Date().getFullYear()} BouncyBucket.
+              All Rights Reserved.
+            </p>
+
+          </div>
+
+        </div>
+
+      </div>
+    `,
+  });
+};
