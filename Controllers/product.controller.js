@@ -21,81 +21,121 @@ export const productList = async (req, res) => {
       page = 1,
       limit = 12,
       q,
-      sort,
+      sort = "newest",
       category,
       featured,
       maxPrice,
       color,
       capacity,
+      material,
+      feature,
       inStock,
+      customizable,
+      minRating,
     } = req.query;
 
+    const pageNumber = Math.max(1, Number.parseInt(page, 10) || 1);
+    const pageSize = Math.min(48, Math.max(1, Number.parseInt(limit, 10) || 12));
     const filter = {};
 
-    // 1. Basic Filters
-    if (category) filter.category = category;
-    if (q) filter.$text = { $search: String(q) };
-    if (featured === "true" || featured === "1" || featured === true) {
-      filter.featured = true;
+    if (category) filter.category = String(category);
+    if (q && String(q).trim()) filter.$text = { $search: String(q).trim() };
+    if (featured === "true" || featured === "1") filter.featured = true;
+    if (customizable === "true") filter.isCustomizable = true;
+
+    // Price is maintained as the minimum variant-size price on create/update.
+    // Legacy records should have this field recalculated once to keep this accurate.
+    if (maxPrice && Number.isFinite(Number(maxPrice))) {
+      filter.price = { $lte: Math.max(0, Number(maxPrice)) };
     }
 
-    if (maxPrice) {
-      filter.price = { $lte: Number(maxPrice) };
+    if (minRating && Number.isFinite(Number(minRating))) {
+      filter.rating = { $gte: Number(minRating) };
     }
 
-    // 2. MULTI-SELECT LOGIC (The Fix)
-    // We use $elemMatch to find products where at least one variant matches the criteria
-    if (color || capacity) {
-      const variantFilter = {};
+    const selectedColors = color ? String(color).split(",").map((v) => v.trim()).filter(Boolean) : [];
+    const selectedCapacities = capacity ? String(capacity).split(",").map((v) => v.trim()).filter(Boolean) : [];
 
-      if (color) {
-
-        const colorArray = String(color).split(",");
-
-        filter["variants.baseColorName"] = {
-          $in: colorArray
-        };
-      }
-
-      if (capacity) {
-
-        const capacityArray = String(capacity).split(",");
-
-        filter["variants.sizes.capacity"] = {
-          $in: capacityArray
-        };
-      }
-
-      filter.variants = { $elemMatch: variantFilter };
+    // One variant must satisfy both color and capacity when both are selected.
+    if (selectedColors.length || selectedCapacities.length || inStock === "true") {
+      const variantMatch = {};
+      if (selectedColors.length) variantMatch.baseColorName = { $in: selectedColors };
+      if (selectedCapacities.length) variantMatch["sizes.capacity"] = { $in: selectedCapacities };
+      if (inStock === "true") variantMatch["sizes.stock"] = { $gt: 0 };
+      filter.variants = { $elemMatch: variantMatch };
+    } else if (inStock === "true") {
+      filter["variants.sizes.stock"] = { $gt: 0 };
     }
 
-    if (inStock === 'true') {
-      filter.stock = { $gt: 0 };
+    const selectedMaterials = material ? String(material).split(",").map((v) => v.trim()).filter(Boolean) : [];
+    if (selectedMaterials.length) {
+      filter["specifications.material"] = { $in: selectedMaterials };
     }
 
-    // 3. Sorting and Pagination
-    const skip = (Number(page) - 1) * Number(limit);
-    const sortObj = {
-  ...(sort === "price_asc"
-    ? { price: 1 }
-    : sort === "price_desc"
-      ? { price: -1 }
-      : { createdAt: -1 }),
-};
+    const selectedFeatures = feature ? String(feature).split(",").map((v) => v.trim()).filter(Boolean) : [];
+    const featureConditions = {
+      insulated: { "specifications.insulation": { $nin: ["", null, "None", "No"] } },
+      leakproof: { "specifications.leakproof": true },
+      dishwasherSafe: { "specifications.dishwasherSafe": true },
+      rustProof: { "specifications.rustProof": true },
+      condensationFree: { "specifications.condensationFree": true },
+      carHolderFit: { "specifications.carHolderFit": true },
+    };
+    for (const selectedFeature of selectedFeatures) {
+      const condition = featureConditions[selectedFeature];
+      if (condition) Object.assign(filter, condition);
+    }
 
-    const [items, total] = await Promise.all([
-      Product.find(filter).sort(sortObj).skip(skip).limit(Number(limit)),
+    const sortMap = {
+      newest: { createdAt: -1 },
+      price_asc: { price: 1, createdAt: -1 },
+      price_desc: { price: -1, createdAt: -1 },
+      rating_desc: { rating: -1, reviewsCount: -1, createdAt: -1 },
+    };
+    const sortObj = sortMap[sort] || sortMap.newest;
+    const skip = (pageNumber - 1) * pageSize;
+
+    // Facets are built from the catalogue, not just the current page, so the
+    // filter options remain stable as customers paginate or filter products.
+    const [items, total, colorFacets, capacityFacets, materialFacets, maxPriceRecord] = await Promise.all([
+      Product.find(filter).sort(sortObj).skip(skip).limit(pageSize).lean(),
       Product.countDocuments(filter),
+      Product.aggregate([
+        { $unwind: "$variants" },
+        { $match: { "variants.baseColorName": { $nin: ["", null] }, "variants.colorCode": { $nin: ["", null] } } },
+        { $group: { _id: "$variants.baseColorName", hex: { $first: "$variants.colorCode" } } },
+        { $sort: { _id: 1 } },
+      ]),
+      Product.distinct("variants.sizes.capacity", { "variants.sizes.capacity": { $nin: ["", null] } }),
+      Product.distinct("specifications.material", { "specifications.material": { $nin: ["", null] } }),
+      Product.findOne({}).sort({ price: -1 }).select("price").lean(),
     ]);
 
-    res.json({
+    const filters = {
+      colors: colorFacets.map((item) => ({ baseColorName: item._id, hex: item.hex })),
+      capacities: capacityFacets.filter(Boolean).sort((a, b) => {
+        const toMl = (value) => {
+          const match = String(value).toLowerCase().match(/([\d.]+)\s*(ml|l)?/);
+          if (!match) return Number.MAX_SAFE_INTEGER;
+          const amount = Number(match[1]);
+          return match[2] === "l" ? amount * 1000 : amount;
+        };
+        return toMl(a) - toMl(b);
+      }),
+      materials: materialFacets.filter(Boolean).sort((a, b) => String(a).localeCompare(String(b))),
+      maxPrice: Number(maxPriceRecord?.price) || 5000,
+    };
+
+    return res.json({
       items,
       total,
-      page: Number(page),
-      pages: Math.ceil(total / Number(limit)),
+      page: pageNumber,
+      pages: Math.max(1, Math.ceil(total / pageSize)),
+      filters,
     });
-  } catch (err) {
-    return res.status(400).json(err.message);
+  } catch (error) {
+    console.error("PRODUCT LIST ERROR:", error);
+    return res.status(500).json({ message: "Unable to fetch products." });
   }
 };
 
