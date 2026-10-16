@@ -1,4 +1,5 @@
 import Coupon from "../Schemas/coupon.schema.js";
+import { evaluateCoupon, getCartMetrics } from "../utils/couponLogic.js";
 
 // CREATE COUPON
 export const createCoupon = async (req, res) => {
@@ -16,6 +17,7 @@ export const createCoupon = async (req, res) => {
       startDate,
       expiryDate,
       isActive,
+      showOnCart,
     } = req.body;
 
     if (!code || !discountType || discountValue === undefined) {
@@ -85,6 +87,7 @@ export const createCoupon = async (req, res) => {
       startDate: startDate || new Date(),
       expiryDate: expiryDate || null,
       isActive: isActive !== false,
+      showOnCart: showOnCart !== false,
     });
 
     return res.status(201).json({
@@ -136,6 +139,10 @@ export const updateCoupon = async (req, res) => {
     // Always normalize coupon code
     if (updates.code) {
       updates.code = updates.code.trim().toUpperCase();
+    }
+
+    if (updates.showOnCart !== undefined) {
+      updates.showOnCart = updates.showOnCart === true;
     }
 
     // Validate discount type
@@ -222,7 +229,7 @@ export const deleteCoupon = async (req, res) => {
 
 export const validateCoupon = async (req, res) => {
   try {
-    const { code, items, cartTotal } = req.body;
+    const { code, items } = req.body;
 
     if (!code) {
       return res.status(400).json({
@@ -232,7 +239,7 @@ export const validateCoupon = async (req, res) => {
     }
 
     const coupon = await Coupon.findOne({
-      code: code.trim().toUpperCase(),
+      code: String(code).trim().toUpperCase(),
       isActive: true,
     });
 
@@ -243,93 +250,32 @@ export const validateCoupon = async (req, res) => {
       });
     }
 
-    // Check start date
-    if (coupon.startDate && new Date() < coupon.startDate) {
+    const result = evaluateCoupon(coupon, items);
+
+    if (!result.ok) {
       return res.status(400).json({
         success: false,
-        message: "This coupon is not active yet",
+        message: result.message,
       });
     }
 
-    // Check expiry
-    if (coupon.expiryDate && new Date() > coupon.expiryDate) {
-      return res.status(400).json({
-        success: false,
-        message: "This coupon has expired",
-      });
-    }
-
-    // Check total usage limit
-    if (
-      coupon.usageLimit !== null &&
-      coupon.usedCount >= coupon.usageLimit
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "This coupon has reached its usage limit",
-      });
-    }
-
-    // Count total number of bottles/items
-    const totalItems = Array.isArray(items)
-      ? items.reduce(
-        (total, item) => total + Number(item.quantity || 0),
-        0
-      )
-      : 0;
-
-    // Minimum number of items
-    if (totalItems < coupon.minimumItems) {
-      return res.status(400).json({
-        success: false,
-        message: `Add at least ${coupon.minimumItems} bottles to use this coupon`,
-      });
-    }
-
-    // Minimum cart value
-    if (Number(cartTotal) < coupon.minimumCartValue) {
-      return res.status(400).json({
-        success: false,
-        message: `Minimum cart value of ₹${coupon.minimumCartValue} required`,
-      });
-    }
-
-    // Calculate discount
-    let discount = 0;
-
-    if (coupon.discountType === "percentage") {
-      discount = (Number(cartTotal) * coupon.discountValue) / 100;
-
-      if (
-        coupon.maximumDiscount !== null &&
-        discount > coupon.maximumDiscount
-      ) {
-        discount = coupon.maximumDiscount;
-      }
-    }
-
-    if (coupon.discountType === "fixed") {
-      discount = coupon.discountValue;
-    }
-
-    // Never allow discount to exceed cart value
-    discount = Math.min(discount, Number(cartTotal));
-
-    const finalAmount = Number(cartTotal) - discount;
+    const { cartTotal } = getCartMetrics(items);
 
     return res.status(200).json({
       success: true,
-      message: "Coupon applied successfully",
+      message: result.message,
       coupon: {
         code: coupon.code,
+        description: coupon.description || "",
         discountType: coupon.discountType,
         discountValue: coupon.discountValue,
         minimumItems: coupon.minimumItems,
         minimumCartValue: coupon.minimumCartValue,
         maximumDiscount: coupon.maximumDiscount,
       },
-      discount,
-      finalAmount,
+      discount: result.discount,
+      finalAmount: result.finalAmount,
+      cartTotal,
     });
   } catch (error) {
     console.error("COUPON VALIDATION ERROR:", error);
@@ -337,6 +283,63 @@ export const validateCoupon = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Unable to validate coupon",
+    });
+  }
+};
+
+export const getStorefrontCoupons = async (req, res) => {
+  try {
+    const now = new Date();
+
+    const coupons = await Coupon.find({
+      isActive: true,
+      showOnCart: true,
+
+      startDate: {
+        $lte: now,
+      },
+
+      $and: [
+        {
+          $or: [
+            { expiryDate: null },
+            { expiryDate: { $gte: now } },
+          ],
+        },
+
+        {
+          $or: [
+            { usageLimit: null },
+            {
+              $expr: {
+                $lt: ["$usedCount", "$usageLimit"],
+              },
+            },
+          ],
+        },
+      ],
+    })
+      .select(
+        "code description discountType discountValue minimumItems minimumCartValue maximumDiscount usageLimit usedCount startDate expiryDate"
+      )
+      .sort({
+        createdAt: -1,
+      })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      coupons,
+    });
+  } catch (error) {
+    console.error(
+      "GET STOREFRONT COUPONS ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch available coupons",
     });
   }
 };

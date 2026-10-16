@@ -8,6 +8,8 @@ import htmlPdf from "html-pdf-node";
 import { generateInvoiceHTML } from "../utils/invoiceTemplate.js";
 import { createTestShiprocketShipment } from "../utils/shiprocket.js";
 import Coupon from "../Schemas/coupon.schema.js";
+import Product from "../Schemas/product.schema.js";
+import { evaluateCoupon } from "../utils/couponLogic.js";
 
 dotenv.config();
 
@@ -60,7 +62,7 @@ export const createOrder = async (req, res) => {
     }
 
     // -----------------------------
-    // 2. CALCULATE CART TOTAL
+    // 2. RESOLVE CART FROM CATALOG
     // -----------------------------
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
@@ -68,11 +70,75 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    const cartTotal = items.reduce(
+    const pricedItems = [];
+
+    for (const item of items) {
+      const quantity = Math.max(1, Number(item.quantity || 1));
+      const product = item._id
+        ? await Product.findById(item._id)
+        : null;
+
+      let unitPrice = Number(item.price || 0);
+      let title = item.title;
+      let color = item.color;
+      let capacity = item.capacity;
+      let image = item.image || item.thumbnail;
+
+      if (product) {
+        const colorKey = String(item.color || "").toLowerCase().trim();
+        const variant =
+          product.variants?.find((v) => {
+            const names = [v.colorName, v.baseColorName]
+              .filter(Boolean)
+              .map((n) => String(n).toLowerCase().trim());
+            return names.includes(colorKey);
+          }) || product.variants?.[0];
+
+        const size =
+          variant?.sizes?.find((s) => s.capacity === item.capacity) ||
+          variant?.sizes?.[0];
+
+        const stock = Number(size?.stock ?? 0);
+        if (stock > 0 && quantity > stock) {
+          return res.status(400).json({
+            error: `${product.title} only has ${stock} left in stock`,
+          });
+        }
+
+        const customFee = item.customization?.text
+          ? Number(product.customizationOptions?.price || 0)
+          : 0;
+
+        unitPrice = Number(size?.price ?? product.price ?? 0) + customFee;
+        title = product.title;
+        color = variant?.colorName || item.color;
+        capacity = size?.capacity || item.capacity;
+        image =
+          variant?.images?.[0] ||
+          product.thumbnail ||
+          item.image;
+      }
+
+      if (unitPrice <= 0) {
+        return res.status(400).json({
+          error: "Invalid cart item price",
+        });
+      }
+
+      pricedItems.push({
+        ...item,
+        title,
+        price: unitPrice,
+        quantity,
+        color,
+        capacity,
+        image,
+      });
+    }
+
+    const cartTotal = pricedItems.reduce(
       (sum, item) =>
-        sum +
-        Number(item.price || 0) *
-        Number(item.quantity || 0),
+        sum + Number(item.price || 0) * Number(item.quantity || 0),
       0
     );
 
@@ -104,90 +170,29 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      // Start date
-      if (
-        coupon.startDate &&
-        new Date() < coupon.startDate
-      ) {
-        return res.status(400).json({
-          error: "This coupon is not active yet",
+      if (coupon.perUserLimit) {
+        const usedByUser = await Order.countDocuments({
+          user: userId,
+          "coupon.code": coupon.code,
+          paymentStatus: "Paid",
         });
-      }
 
-      // Expiry
-      if (
-        coupon.expiryDate &&
-        new Date() > coupon.expiryDate
-      ) {
-        return res.status(400).json({
-          error: "This coupon has expired",
-        });
-      }
-
-      // Usage limit
-      if (
-        coupon.usageLimit !== null &&
-        coupon.usedCount >= coupon.usageLimit
-      ) {
-        return res.status(400).json({
-          error: "This coupon has reached its usage limit",
-        });
-      }
-
-      // Total quantity
-      const totalItems = items.reduce(
-        (total, item) =>
-          total + Number(item.quantity || 0),
-        0
-      );
-
-      // Minimum items
-      if (
-        totalItems < coupon.minimumItems
-      ) {
-        return res.status(400).json({
-          error: `Add at least ${coupon.minimumItems} bottles to use this coupon`,
-        });
-      }
-
-      // Minimum cart value
-      if (
-        cartTotal < coupon.minimumCartValue
-      ) {
-        return res.status(400).json({
-          error: `Minimum cart value of ₹${coupon.minimumCartValue} required`,
-        });
-      }
-
-      // -----------------------------
-      // CALCULATE DISCOUNT
-      // -----------------------------
-      if (coupon.discountType === "percentage") {
-        couponDiscount =
-          (cartTotal * coupon.discountValue) /
-          100;
-
-        if (
-          coupon.maximumDiscount !== null &&
-          couponDiscount >
-            coupon.maximumDiscount
-        ) {
-          couponDiscount =
-            coupon.maximumDiscount;
+        if (usedByUser >= Number(coupon.perUserLimit)) {
+          return res.status(400).json({
+            error: "You have already used this coupon",
+          });
         }
       }
 
-      if (coupon.discountType === "fixed") {
-        couponDiscount =
-          coupon.discountValue;
+      const result = evaluateCoupon(coupon, pricedItems);
+
+      if (!result.ok) {
+        return res.status(400).json({
+          error: result.message,
+        });
       }
 
-      // Never discount more than cart
-      couponDiscount = Math.min(
-        couponDiscount,
-        cartTotal
-      );
-
+      couponDiscount = result.discount;
       appliedCoupon = coupon;
     }
 
@@ -263,7 +268,7 @@ export const createOrder = async (req, res) => {
     // -----------------------------
     const newOrder = await Order.create({
       user: userId,
-      items,
+      items: pricedItems,
       shippingAddress: address,
 
       // IMPORTANT:
@@ -348,6 +353,8 @@ export const verifyPayment = async (req, res) => {
 
     if (!order) return res.status(404).json({ error: "Order not found" });
 
+    const alreadyPaid = order.paymentStatus === "Paid";
+
     // 3. Update Status
     order.paymentStatus = "Paid";
     order.razorpayPaymentId = razorpay_payment_id;
@@ -368,6 +375,13 @@ export const verifyPayment = async (req, res) => {
     }
 
     await order.save();
+
+    if (!alreadyPaid && order.coupon?.code) {
+      await Coupon.findOneAndUpdate(
+        { code: String(order.coupon.code).toUpperCase() },
+        { $inc: { usedCount: 1 } }
+      );
+    }
 
     // 4. Trigger Email (Passing "success" as the status)
     console.log("========== EMAIL DEBUG ==========");

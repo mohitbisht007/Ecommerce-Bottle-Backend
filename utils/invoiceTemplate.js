@@ -12,6 +12,15 @@ export const generateInvoiceHTML = (orderData) => {
   const cleanOrderId = rawOrderId.replace(/^order_/, '').toUpperCase();
 
   // 2. GST Breakdown Calculation (Assuming 18% inclusive GST for water bottles)
+  const couponDiscount = Number(orderData.coupon?.discount || 0);
+  const couponCode = orderData.coupon?.code || "";
+  const itemSubtotal = Array.isArray(orderData.items)
+    ? orderData.items.reduce(
+        (sum, item) =>
+          sum + Number(item.price || 0) * Number(item.quantity || 1),
+        0
+      )
+    : Number(orderData.totalAmount || 0) + couponDiscount;
   const totalAmount = Number(orderData.totalAmount || 0);
   const basePrice = totalAmount / 1.18;
   const totalGst = totalAmount - basePrice;
@@ -160,8 +169,17 @@ export const generateInvoiceHTML = (orderData) => {
           <td style="width: 50%;">
             <table style="width: 100%; border-collapse: collapse;">
               <tr class="total-row">
-                <td class="text-right">Taxable Value (Subtotal):</td>
-                <td class="text-right" style="width: 40%;">₹${basePrice.toFixed(2)}</td>
+                <td class="text-right">Items Subtotal:</td>
+                <td class="text-right" style="width: 40%;">₹${itemSubtotal.toFixed(2)}</td>
+              </tr>
+              ${couponDiscount > 0 ? `
+              <tr class="total-row">
+                <td class="text-right">Coupon (${couponCode}):</td>
+                <td class="text-right">-₹${couponDiscount.toFixed(2)}</td>
+              </tr>` : ""}
+              <tr class="total-row">
+                <td class="text-right">Taxable Value:</td>
+                <td class="text-right">₹${basePrice.toFixed(2)}</td>
               </tr>
               <tr class="total-row">
                 <td class="text-right">CGST (9%):</td>

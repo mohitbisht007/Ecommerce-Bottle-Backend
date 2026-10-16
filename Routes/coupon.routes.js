@@ -6,6 +6,7 @@ import {
   updateCoupon,
   deleteCoupon,
   validateCoupon,
+  getStorefrontCoupons,
 } from "../Controllers/coupon.controller.js";
 
 import {
@@ -14,6 +15,11 @@ import {
 } from "../Middlewares/authenticateUser.js";
 
 const router = express.Router();
+
+
+// ===============================
+// ADMIN
+// ===============================
 
 router.post(
   "/admin",
@@ -45,12 +51,21 @@ router.delete(
 
 
 // ===============================
-// CUSTOMER
+// CUSTOMER / STOREFRONT
 // ===============================
 
+// Coupons that admin has chosen to
+// display inside the cart/sidebar
+router.get(
+  "/storefront",
+  getStorefrontCoupons
+);
+
+// Validate a coupon during checkout/cart
 router.post(
   "/validate",
   validateCoupon
 );
+
 
 export default router;
